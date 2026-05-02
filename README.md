@@ -55,9 +55,7 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 
 ## Observed in the wild
 
-While trying to get a resized version of my LinkedIn profile image (`linkedin.com/in/jayjlane.png?size=100`) I hit an error and went back to my main profile page  with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
-
-Thinking that one of my extensions weren't playing nice I disabled the usual suspects UBlockOrigin, Obsidian Web Clipper, React Dev Tools, and it was still occurring. I went scorched earth and disabled all my extensions to no avail causing me to look deeper.
+While viewing a single LinkedIn profile page (`linkedin.com/in/<user>/`) with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
 
 ![DevTools Network panel showing chrome-extension://invalid/ probes on a single profile pageview](screenshots/devtools-network-overview.png)
 
@@ -68,6 +66,48 @@ The detail view of any single row shows it was a `fetch` that failed with `net::
 Important presentation detail: Chrome's DevTools rewrites the displayed URL to **`chrome-extension://invalid/`** when the target extension isn't installed. This is a Chrome-side privacy mitigation — it deliberately hides which extension ID was probed so a screenshot can't leak the probe list. The real fetches go to `chrome-extension://<actual-id>/<file>` for each of the 6,222 unique IDs in [`probed-extension-ids.txt`](probed-extension-ids.txt).
 
 In one captured session: **300 of the 2,865 visible network requests on a single profile pageview were extension probes** (scrolled view, the actual count is in the thousands — there is one fetch per probed ID).
+
+## This is not new — LinkedIn was told over two months ago
+
+The behaviour documented here is not something I (or anyone else doing this analysis) discovered first. It has been visibly broken in users' DevTools consoles for **months**, and LinkedIn's own support team has publicly acknowledged it as a "known issue" while shipping no fix.
+
+**Original report (r/linkedin, ~2026-02):** [LinkedIn Continuous console errors on Google Chrome](https://www.reddit.com/r/linkedin/comments/1qwsmjg/linkedin_continuous_console_errors_on_google/)
+
+A user noticed their browser console flooding with hundreds of:
+
+```
+GET chrome-extension://invalid/   net::ERR_FAILED
+```
+
+errors per minute on every linkedin.com page. They tried clearing cookies, removing all extensions, switching to a fresh Chrome profile, and going incognito. None of it worked, because the requests were being made by linkedin.com itself, not by any extension on the user's machine. Firefox didn't show the errors — because, as we now know, the probe is gated to Chromium-only via a `navigator.userAgent.indexOf("Chrome")` check.
+
+**LinkedIn's official response in the same thread, from `u/LinkedInHelpTeam`:**
+
+> "Hi, sorry this took a bit of time. We confirmed that this is a known issue, and we're currently working on a fix. Thanks so much for your patience."
+
+That response is more than two months old as of this writing. **The probe is still firing.** You can verify that yourself in 30 seconds with the steps in the next section.
+
+**Related r/europe crosspost** ([1sdw2ac](https://www.reddit.com/r/europe/comments/1sdw2ac/linkedin_scanned_6222_browser_extensions_on_every/)) titled *"LinkedIn scanned 6222 browser extensions on every…"* — independently arriving at exactly the **6,222** unique-ID figure documented in this repository.
+
+**Independent writeup:** [browsergate.eu/how-it-works](https://browsergate.eu/how-it-works/) describes the same technique.
+
+**Community workaround:** another commenter (`@mujtaba3b` on GitHub) shipped a Chrome extension that intercepts and blocks the probe locally. Useful as immediate harm-reduction, but obviously not a substitute for LinkedIn fixing it on their end.
+
+So to be clear about the timeline:
+
+| date | what happened |
+|---|---|
+| ≈ 2026-02 | Users start seeing hundreds of failed `chrome-extension://invalid/` fetches per pageview in the console. |
+| ≈ 2026-02 | Multiple bug reports filed publicly on Reddit. |
+| ≈ 2026-02 | `u/LinkedInHelpTeam` publicly confirms it as a "known issue" being "worked on". |
+| 2026-05-02 | Probe is still firing on every linkedin.com pageview, with the same 6,222-entry hardcoded list. This repository was created. |
+
+What that timeline implies is up to the reader. Two readings are possible:
+
+1. **Incompetence** — LinkedIn agrees it's a bug and simply has not prioritised the fix in 2+ months.
+2. **Deliberate** — the "known issue, working on a fix" line is the standard PR holding pattern for telemetry that the company has no intention of removing, because the probe is functioning exactly as designed (it is named `AbuseFeaturesCollectionCoordinator` after all).
+
+The code itself does not adjudicate between those two readings. But "shipping a 6,222-entry browser-extension-fingerprinting probe to every visitor in a specific browser family" is not something that lands in production by accident, and a console error visible to anyone with DevTools open is not something a company of LinkedIn's size fails to notice for two months unless it chooses to.
 
 ## Reproducing the find yourself
 
