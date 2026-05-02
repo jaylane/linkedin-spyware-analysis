@@ -153,6 +153,33 @@ def risk_score(rec: dict) -> float:
     return float((rec.get("riskImpact") or 0)) * float((rec.get("riskLikelihood") or 0))
 
 
+def all_targeted_domains(rec: dict) -> list[str]:
+    """Every domain mentioned in any access-to-specific-domain reason."""
+    out: list[str] = []
+    for r in (rec.get("risk") or {}).get("riskImpactReasons", []) or []:
+        if r.get("reason") == "access-to-specific-domain":
+            desc = r.get("description") or ""
+            if ":" in desc:
+                doms = desc.split(":", 1)[1].strip().rstrip(".")
+                out.extend(d.strip().lower() for d in doms.split(",") if d.strip())
+    return out
+
+
+def normalize_domain(d: str) -> str:
+    """Strip wildcards/paths/protocols to the apex-ish form for grouping."""
+    d = d.strip().lower()
+    for pre in ("https://", "http://", "*://", "*."):
+        if d.startswith(pre):
+            d = d[len(pre):]
+    d = d.split("/")[0]
+    parts = d.split(".")
+    # Best-effort apex: keep last 2 labels for typical domains, last 3 for
+    # known multi-part TLDs. Good enough for top-N counting.
+    if len(parts) >= 3 and parts[-2] in ("co", "ac", "gov", "com", "org") and len(parts[-1]) == 2:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:]) if len(parts) >= 2 else d
+
+
 # ----------------------------------------------------------------------------
 # Summary CSV
 # ----------------------------------------------------------------------------
@@ -240,20 +267,75 @@ def build_report_md(records: list[dict], malicious_db: dict[str, dict],
     by_score = sorted(with_data, key=risk_score, reverse=True)[:25]
     by_users = sorted(with_data, key=lambda r: -(r.get("userCount") or 0))[:25]
 
+    # ---- richer aggregations needed for the executive summary --------------
+
+    # Risk distribution of LinkedIn-targeting vs not
+    targeting_set = set(id(r) for r in linkedin_targets)
+    not_targeting = [r for r in with_data if id(r) not in targeting_set]
+
+    def likelihood_dist(rs: list[dict]) -> dict[int, int]:
+        return Counter(r.get("riskLikelihood") for r in rs)
+
+    likelihood_target = likelihood_dist(linkedin_targets)
+    likelihood_nontarget = likelihood_dist(not_targeting)
+
+    # Top other domains targeted (excluding linkedin.com itself)
+    domain_counts: Counter = Counter()
+    for r in with_data:
+        for d in all_targeted_domains(r):
+            apex = normalize_domain(d)
+            if apex and "linkedin" not in apex and "licdn" not in apex:
+                domain_counts[apex] += 1
+
+    # Author concentration
+    author_counts = Counter(
+        (r.get("authorId") or r.get("rawAuthorName") or "").strip()
+        for r in with_data
+        if r.get("authorId") or r.get("rawAuthorName")
+    )
+    distinct_authors = len(author_counts)
+    top_authors = author_counts.most_common(20)
+    multi_extension_authors = sum(1 for _, c in author_counts.items() if c >= 2)
+
     # toborrm9 cross-reference
     in_db = [r for r in with_data if (r.get("id") or "") in malicious_db]
+
+    # ---- markdown render ---------------------------------------------------
 
     L: list[str] = []
     L.append("# Chrome-Stats enrichment of LinkedIn's extension probe list")
     L.append("")
     L.append(
         f"Per-extension data pulled from the [Chrome-Stats](https://chrome-stats.com/) "
-        f"API (Premium plan, 10k req/day) for each extension ID in "
-        f"[`probed-extension-ids.txt`](../probed-extension-ids.txt)."
+        f"API (Premium plan, 10,000 req/day) for each of the **6,222 unique** "
+        f"Chrome extensions in [`probed-extension-ids.txt`](../probed-extension-ids.txt) "
+        f"that LinkedIn fingerprints on every Chromium pageview."
     )
     L.append("")
-    L.append(f"**Source data:** [`{source_jsonl.relative_to(REPO_ROOT)}`](../{source_jsonl.relative_to(REPO_ROOT)}) (gitignored)")
+    L.append(f"**Source data:** [`{source_jsonl.relative_to(REPO_ROOT)}`](../{source_jsonl.relative_to(REPO_ROOT)}) (gitignored — regenerable)")
     L.append(f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    L.append("")
+    L.append("## Executive summary")
+    L.append("")
+    pct_targeting = 100 * len(linkedin_targets) / max(n_with_data, 1)
+    pct_not_targeting = 100 * len(not_targeting) / max(n_with_data, 1)
+    high_suspicion_count = sum(c for v, c in likelihood_counts.items()
+                               if isinstance(v, int) and v >= 3)
+    pct_high_suspicion = 100 * high_suspicion_count / max(n_with_data, 1)
+    pct_recent_perm = 100 * len(recent_perm) / max(n_with_data, 1)
+    pct_email_change = 100 * len(email_changes) / max(n_with_data, 1)
+    pct_blocked = 100 * len(blocked) / max(n_with_data, 1)
+    pct_in_db = 100 * len(in_db) / max(n_with_data, 1)
+
+    L.append("Of the **{:,}** extensions LinkedIn fingerprints (per Chrome-Stats data):".format(n_with_data))
+    L.append("")
+    L.append(f"- **{pct_targeting:.1f}%** ({len(linkedin_targets):,}) explicitly request access to `linkedin.com` in their manifest. The framing of \"anti-abuse against LinkedIn-targeting extensions\" applies to *this slice only*.")
+    L.append(f"- **{pct_not_targeting:.1f}%** ({len(not_targeting):,}) do **not** declare any access to `linkedin.com`. LinkedIn fingerprints them on every pageview anyway.")
+    L.append(f"- **{pct_high_suspicion:.1f}%** ({high_suspicion_count:,}) have Chrome-Stats `riskLikelihood >= 3` — i.e., elevated suspicion of actual misuse (as opposed to merely-broad permissions).")
+    L.append(f"- **{pct_recent_perm:.1f}%** ({len(recent_perm):,}) added at least one permission or host-permission in the last year (the **update-poisoning** signal).")
+    L.append(f"- **{pct_email_change:.1f}%** ({len(email_changes):,}) had at least one author-email change in their lifetime (the **acquisition-then-poisoning** signal).")
+    L.append(f"- **{pct_blocked:.2f}%** ({len(blocked):,}) are currently blocked or unlisted by the Chrome Web Store.")
+    L.append(f"- **{pct_in_db:.2f}%** ({len(in_db):,}) appear in the curated [`toborrm9/malicious_extension_sentry`](https://github.com/toborrm9/malicious_extension_sentry) database. (See [`MALICIOUS_OVERLAP.md`](MALICIOUS_OVERLAP.md) for the categorical breakdown.)")
     L.append("")
     L.append("## Coverage")
     L.append("")
@@ -303,6 +385,28 @@ def build_report_md(records: list[dict], malicious_db: dict[str, dict],
         f"({100*not_targeting_linkedin/max(n_with_data,1):.1f}%) have no "
         f"declared interest in LinkedIn — yet LinkedIn fingerprints them anyway."
     )
+    L.append("")
+    L.append("### Risk distribution: LinkedIn-targeting subset vs everything else")
+    L.append("")
+    L.append("If anti-abuse were the goal, we'd expect the LinkedIn-targeting subset to skew higher-likelihood (more known-suspicious extensions). Compare:")
+    L.append("")
+    L.append("| likelihood | LinkedIn-targeting | non-targeting |")
+    L.append("|---|---|---|")
+    nt_total = max(len(linkedin_targets), 1)
+    nn_total = max(len(not_targeting), 1)
+    for v in [0, 1, 2, 3, 4]:
+        a = likelihood_target.get(v, 0)
+        b = likelihood_nontarget.get(v, 0)
+        L.append(f"| {v} | {a:,} ({100*a/nt_total:.1f}%) | {b:,} ({100*b/nn_total:.1f}%) |")
+    L.append("")
+    L.append("### Top non-LinkedIn domains LinkedIn-probed extensions also touch")
+    L.append("")
+    L.append("Each row is a domain (apex form) that ≥1 LinkedIn-probed extension declares access to. Reveals what other targets / data flows the probed extensions are designed for. (`linkedin.com` and `licdn.com` excluded as they are by definition the framing of this analysis.)")
+    L.append("")
+    L.append("| domain | extensions touching it |")
+    L.append("|---|---|")
+    for dom, count in domain_counts.most_common(30):
+        L.append(f"| `{dom}` | {count:,} |")
     L.append("")
 
     L.append("## CWS removal / unlisting status")
@@ -366,6 +470,30 @@ def build_report_md(records: list[dict], malicious_db: dict[str, dict],
             f"| {(r.get('name') or '')[:60]} | {users:,} | "
             f"{r.get('riskImpact')} × {r.get('riskLikelihood')} = {risk_score(r):.0f} |"
         )
+    L.append("")
+
+    L.append("## Author concentration")
+    L.append("")
+    L.append(
+        f"The 6,222 extensions are produced by **{distinct_authors:,}** distinct authors. "
+        f"**{multi_extension_authors:,}** authors produced 2 or more extensions on the list. "
+        f"This is a useful concentration signal — if a small number of authors are producing "
+        f"a large share of LinkedIn-probed extensions, that points at organised lead-gen "
+        f"vendors / tooling shops more than independent maintainers."
+    )
+    L.append("")
+    L.append("### Top 20 authors by number of LinkedIn-probed extensions")
+    L.append("")
+    L.append("| Author | Extension count |")
+    L.append("|---|---|")
+    for author, count in top_authors:
+        # Display name: prefer rawAuthorName from any record by this author
+        display = author[:60] if not author.startswith("u") else author
+        for r in with_data:
+            if r.get("authorId") == author or r.get("rawAuthorName") == author:
+                display = (r.get("rawAuthorName") or r.get("author") or author)[:60]
+                break
+        L.append(f"| {display} | {count} |")
     L.append("")
 
     L.append("## Cross-reference with toborrm9/malicious_extension_sentry")

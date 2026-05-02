@@ -79,25 +79,37 @@ In one captured session: **300 of the 2,865 visible network requests on a single
 
 ## Is the probe list actually targeting malicious extensions?
 
-LinkedIn frames the probe internally as **anti-abuse telemetry** (the class is literally `AbuseFeaturesCollectionCoordinator`). A natural empirical question is: how much of the 6,222-entry probe list overlaps with extensions that an *independent* curated database has classified as malicious, suspicious, or policy-violating?
+LinkedIn frames the probe internally as **anti-abuse telemetry** (the class is literally `AbuseFeaturesCollectionCoordinator`). Two empirical tests of that claim:
 
-Cross-referencing against [`toborrm9/malicious_extension_sentry`](https://github.com/toborrm9/malicious_extension_sentry) (1,465 unique IDs at snapshot time):
+### Test 1 — does the probe list match a curated malicious DB?
+
+Cross-referencing against [`toborrm9/malicious_extension_sentry`](https://github.com/toborrm9/malicious_extension_sentry):
 
 | metric | value |
 |---|---|
 | LinkedIn probe list (unique IDs) | **6,222** |
-| Malicious DB (unique IDs) | **1,465** |
-| **Overlap** | **40** |
-| Overlap as % of LinkedIn probe list | **0.64%** |
+| Probes targeting extensions in the malicious DB | **40 (0.64%)** |
 | Probes targeting extensions with **no** known-malicious classification | **6,182 (99.36%)** |
 
-So two things are simultaneously true:
+The 40 overlapping extensions are overwhelmingly LinkedIn-specific scraping / prospecting / lead-gen / fake-engagement tools — narrowly defensible as anti-abuse. The remaining 99.36% have no malicious classification anywhere. Full table: [`reports/MALICIOUS_OVERLAP.md`](reports/MALICIOUS_OVERLAP.md).
 
-1. **Where the lists overlap, the framing holds.** The 40 matched extensions are overwhelmingly LinkedIn-specific scraping / prospecting / lead-gen / fake-engagement tools (e.g. *Linkedin Cookie Importer*, *Shield Linkedin Analytics*, *NavWise: Prospect List Exporter*, *Salesmind Ai*, *ConnectGenie - Linkedin AI Assistant*, *Yadulink Linkedin Prospec*, *Buska LinkedIn*, *Highperformr Ai Phone Num*). For that narrow slice, "anti-abuse" is a defensible label.
+### Test 2 — what does Chrome-Stats say about the probed extensions?
 
-2. **But that's 0.64%.** The other 99.36% of the IDs LinkedIn fingerprints on every Chromium pageview have **no** classification in the curated malicious-extension database. Whatever LinkedIn is doing with those 6,182 probes, "checking for known-malicious extensions" is not a complete explanation.
+We pulled per-extension data from the [Chrome-Stats](https://chrome-stats.com/) API (Premium tier) for all 6,222 probed IDs. Chrome-Stats runs a continuous Chrome-Web-Store crawler and publishes structured `riskImpact` (capability) × `riskLikelihood` (intent) scores for every extension it tracks. Findings:
 
-Full breakdown, the 40-row overlap table, and reproduction instructions: [`reports/MALICIOUS_OVERLAP.md`](reports/MALICIOUS_OVERLAP.md).
+| signal | share of probed list |
+|---|---|
+| **Don't request any access to `linkedin.com`** in their manifest | **63.8% (3,971)** |
+| Have Chrome-Stats `riskLikelihood >= 3` (elevated suspicion of misuse) | **10.5% (656)** |
+| Are currently blocked or unlisted by the Chrome Web Store | **0.05% (3)** |
+| Show **update-poisoning** indicators (added permission(s) in last year) | **22.9% (1,423)** |
+| Show **acquisition-then-poisoning** indicators (author email change in lifetime) | **7.6% (471)** |
+
+The 63.8% number is the most damning. Almost two-thirds of the extensions LinkedIn fingerprints on every Chromium pageview don't request access to `linkedin.com` in any form. Their manifest doesn't mention LinkedIn. They aren't designed to scrape LinkedIn. Whatever LinkedIn is checking for in their presence, it can't be "abuse against LinkedIn" — they have no declared interaction with LinkedIn at all.
+
+The most-installed extensions on LinkedIn's probe list include **Adobe Acrobat (335M users), Grammarly (42M), Malwarebytes Browser Guard (11M), Loom (8M), QuillBot (6M), DeepL (4M), Microsoft Editor (2M), Calendly (700K), HubSpot Sales (1M)**. Chrome-Stats rates every one of these as `riskLikelihood=0` (trusted). Calling production fingerprinting of *Adobe Acrobat* "anti-abuse" requires a definition of abuse that is broad enough to swallow the term.
+
+Full per-extension report — risk distribution, top non-LinkedIn domains touched, author concentration, update-poisoning candidates, the highest-risk 25 and most-installed 25, and the cross-reference with the curated malicious DB — is in [`reports/CHROME_STATS_ANALYSIS.md`](reports/CHROME_STATS_ANALYSIS.md).
 
 ## This is not new — LinkedIn was told over two months ago
 
