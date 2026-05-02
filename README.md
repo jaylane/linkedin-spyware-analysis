@@ -58,7 +58,6 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 | [`scripts/chrome_stats_client.py`](scripts/chrome_stats_client.py) | Thin stdlib-only client for the [Chrome-Stats](https://chrome-stats.com/) API. Bulk-fetch mode is resumable and JSONL-cached. |
 | [`scripts/analyze_chrome_stats.py`](scripts/analyze_chrome_stats.py) | Turns the JSONL output of `chrome_stats_client.py` into a CSV summary and a Markdown findings report. |
 | [`scripts/fetch_extension_metadata.py`](scripts/fetch_extension_metadata.py) | Earlier no-API CWS scraper. Useful as a free-tier fallback for extensions Chrome-Stats lacks. |
-| [`docs/CRXRAY_PROPOSAL.md`](docs/CRXRAY_PROPOSAL.md) | Stub pointing to the [CRXray project](https://github.com/jaylane/CRXray.io), a free open-data extension-risk-scoring layer that this analysis surfaced the need for. |
 | `README.md` | This file. |
 
 ## Observed in the wild
