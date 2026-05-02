@@ -1,0 +1,31 @@
+MIT License
+
+Copyright (c) 2026 Jason Lane (@jaylane)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Note on scope: this license covers the original analysis artifacts in this
+repository (the deobfuscated/annotated source file, the README, and the
+extension-ID list as compiled and ordered here). It does not grant any rights
+in the underlying minified JavaScript that was analyzed, which is © LinkedIn
+Corporation / Microsoft. The deobfuscated file is a clean-room renaming
+produced for the purpose of security research and public-interest commentary,
+and is believed to be a fair-use transformation under 17 U.S.C. § 107.
