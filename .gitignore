@@ -1,0 +1,11 @@
+# Launch-post drafts — kept local, not public
+posts/
+
+# macOS
+.DS_Store
+
+# Editor scratch
+*.swp
+*.swo
+.vscode/
+.idea/

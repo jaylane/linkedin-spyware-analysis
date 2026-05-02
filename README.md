@@ -51,11 +51,14 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 | [`screenshots/`](screenshots/) | DevTools captures showing the probes firing on a real linkedin.com pageview. |
 | [`scripts/re-extract.sh`](scripts/re-extract.sh) | Regenerates `probed-extension-ids.txt` from a freshly-downloaded chunk. Use this to track changes across LinkedIn deploys. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Per-capture record of the bundle hash, probe count, and any changes. PRs welcome with newer captures. |
+| [`THANKS.md`](THANKS.md) | Credits to the people who reported this before me. |
 | `README.md` | This file. |
 
 ## Observed in the wild
 
-While viewing a single LinkedIn profile page (`linkedin.com/in/<user>/`) with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
+I stumbled into this while trying to grab a resized version of my own LinkedIn profile image (`linkedin.com/in/jayjlane.png?size=100`). The image URL errored out, so I went back to my main profile page — and with DevTools already open, I noticed the Network panel filling up with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`: the eager call, and the `requestIdleCallback`/route-change re-fire).
+
+Thinking one of my own extensions was misbehaving, I disabled the usual suspects — uBlock Origin, Obsidian Web Clipper, React DevTools — and the errors kept coming. I went scorched earth and disabled *every* extension. Still happening. That's what made me look deeper, and the deeper I looked, the clearer it became that the requests were coming from linkedin.com itself.
 
 ![DevTools Network panel showing chrome-extension://invalid/ probes on a single profile pageview](screenshots/devtools-network-overview.png)
 
