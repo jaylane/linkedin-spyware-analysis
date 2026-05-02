@@ -53,8 +53,12 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 | [`CHANGELOG.md`](CHANGELOG.md) | Per-capture record of the bundle hash, probe count, and any changes. PRs welcome with newer captures. |
 | [`THANKS.md`](THANKS.md) | Credits to the people who reported this before me. |
 | [`reports/MALICIOUS_OVERLAP.md`](reports/MALICIOUS_OVERLAP.md) | Cross-reference of LinkedIn's 6,222-entry probe list against an independent malicious-extension database. **Headline: 0.64% overlap.** |
-| [`scripts/cross_reference_malicious.py`](scripts/cross_reference_malicious.py) | Regenerates the cross-reference report. Standard-library Python, no deps. |
-| [`scripts/fetch_extension_metadata.py`](scripts/fetch_extension_metadata.py) | Slow companion: fetches Chrome Web Store name + description for every probed ID. Resumable. |
+| [`reports/CHROME_STATS_ANALYSIS.md`](reports/CHROME_STATS_ANALYSIS.md) | Per-extension risk analysis using Chrome-Stats Premium data: capability × intent risk distribution, LinkedIn-targeting share, update-poisoning indicators, ownership-transfer indicators. |
+| [`scripts/cross_reference_malicious.py`](scripts/cross_reference_malicious.py) | Regenerates the malicious-overlap cross-reference. Standard-library Python, no deps. |
+| [`scripts/chrome_stats_client.py`](scripts/chrome_stats_client.py) | Thin stdlib-only client for the [Chrome-Stats](https://chrome-stats.com/) API. Bulk-fetch mode is resumable and JSONL-cached. |
+| [`scripts/analyze_chrome_stats.py`](scripts/analyze_chrome_stats.py) | Turns the JSONL output of `chrome_stats_client.py` into a CSV summary and a Markdown findings report. |
+| [`scripts/fetch_extension_metadata.py`](scripts/fetch_extension_metadata.py) | Earlier no-API CWS scraper. Useful as a free-tier fallback for extensions Chrome-Stats lacks. |
+| [`docs/CRXRAY_PROPOSAL.md`](docs/CRXRAY_PROPOSAL.md) | Design proposal for a free, open-data extension-risk-scoring layer (project name **CRXray**) that this analysis surfaced the need for. |
 | `README.md` | This file. |
 
 ## Observed in the wild

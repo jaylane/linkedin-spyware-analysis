@@ -1,0 +1,2939 @@
+openapi: 3.0.0
+info:
+  title: Chrome-Stats API
+  description: |
+    Please use `https://chrome-stats.com` as the API server.
+
+    ### Getting API Keys:
+    In order to use our API, you will need to create an API key in the [Chrome-Stats API key console](/myprofile).
+
+    Note that some APIs are only available to premium users.
+
+    The API key allows us to identify your request, grant access to premium resources, bypass the web application firewall, etc. Once you have a valid API key, you can also try the API calls directly here.
+
+    When using an API, be sure to include your API key in the request header `x-api-key: <your-api-key>`. Do **NOT** share your API keys with other users.
+
+    ### Rate Limits and Quota:
+
+    Our API rate limit:
+
+    - Enterprise members: **Unlimited**
+    - Premium members: **10,000** requests / day
+    - Non-premium members: **100** requests / month
+
+    If your usage is above the limit, you will get a 429 status response. Please slow down your request before trying again, or [upgrade to a higher membership tier](/pricing).
+
+    We don't enforce rate-limiting for Enterprise users. Just please be courteous and do not DoS our servers.
+
+    ### Paginations:
+
+    Some of our APIs support pagination via the "page" URL parameters. Pagination starts at page=1. Pagination is only available for Pro and Premium members. Free members requesting page > 1 will get an error.
+
+    ### Webhook Verification:
+
+    Chrome-Stats webhooks can be secured using a shared secret to verify the authenticity of webhook requests. This section explains how to implement webhook signature verification in your application.
+
+    #### Setting up a Shared Secret
+
+    1. Go to the [API Keys console](/myprofile)
+    2. When adding or editing a webhook, enter a secure string in the "Shared Secret" field
+    3. Save your webhook configuration
+
+    #### Verifying Webhook Signatures
+
+    When a webhook is sent to your endpoint, Chrome-Stats includes a signature in the `X-Chrome-Stats-Signature` header. This signature is a HMAC SHA-256 hash of the request body, using your shared secret as the key.
+
+    To verify the signature:
+
+    1. Extract the signature from the `X-Chrome-Stats-Signature` header
+    2. Compute the HMAC SHA-256 hash of the raw request body using your shared secret
+    3. Compare the computed hash with the signature from the header
+    4. If they match, the webhook is authentic and hasn't been tampered with
+
+    #### Code Examples
+
+    **Node.js**
+    ```javascript
+    const crypto = require('crypto');
+
+    // Express.js example
+    app.post('/webhook', express.raw({type: 'application/json'}), (req, res) => {
+      const signature = req.headers['x-chrome-stats-signature'];
+      const body = req.body; // Raw request body
+      const sharedSecret = 'your_shared_secret';
+
+      // Compute the expected signature
+      const expectedSignature = crypto
+        .createHmac('sha256', sharedSecret)
+        .update(body)
+        .digest('hex');
+
+      // Compare signatures
+      if (crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      )) {
+        // Signature is valid, process the webhook
+        const payload = JSON.parse(body);
+        // Process webhook payload...
+        res.status(200).send('Webhook received');
+      } else {
+        // Invalid signature
+        res.status(401).send('Invalid signature');
+      }
+    });
+    ```
+
+    **Python**
+    ```python
+    import hmac
+    import hashlib
+    from flask import Flask, request, jsonify
+
+    app = Flask(__name__)
+
+    @app.route('/webhook', methods=['POST'])
+    def webhook():
+        # Get the signature from the header
+        signature = request.headers.get('X-Chrome-Stats-Signature')
+
+        # Get the raw request body
+        request_data = request.get_data()
+
+        # Your shared secret
+        shared_secret = 'your_shared_secret'
+
+        # Compute the expected signature
+        expected_signature = hmac.new(
+            shared_secret.encode('utf-8'),
+            request_data,
+            hashlib.sha256
+        ).hexdigest()
+
+        # Compare signatures
+        if hmac.compare_digest(signature, expected_signature):
+            # Signature is valid, process the webhook
+            payload = request.json
+            # Process webhook payload...
+            return jsonify({'status': 'success'}), 200
+        else:
+            # Invalid signature
+            return jsonify({'status': 'error', 'message': 'Invalid signature'}), 401
+    ```
+  version: 1.0.0
+servers:
+  - url: https://chrome-stats.com
+securitySchemes:
+  apiKey:
+    type: apiKey
+    in: header
+    name: x-api-key
+    description: API key required for access. Obtain from the [Chrome-Stats API key console](/myprofile).
+security:
+  - apiKey: []
+
+paths:
+  /api/detail:
+    get:
+      description: |
+        Retrieve details of a browser extension.
+
+        This API is available to all users. However, paid members can see additional fields in the response.
+      operationId: getExtensionDetails
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Chrome extension ID, Android package ID, Edge add-on id, or Firefox add-on id.
+          examples:
+            chrome:
+              value: bmnlcjabgnpnenekpadlanbbkooimhnj
+            android:
+              value: com.joinhoney.honeyandroid
+            edge:
+              value: amnbcmdbanbkjhnfoeceemmmdiepnbpp
+            firefox:
+              value: honey
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDetails'
+        '429':
+          description: Rate limit exceeded
+  /api/list-versions:
+    get:
+      description: Returns a list of downloadable versions for an extension
+      operationId: listExtensionVersions
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Extension / app ID. e.g., bmnlcjabgnpnenekpadlanbbkooimhnj
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+      responses:
+        '200':
+          description: A list of available versions and types.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListVersionsResponse'
+        '429':
+          description: Rate limit exceeded
+  /api/download:
+    get:
+      description: Download a browser extension version
+      operationId: downloadExtension
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Extension / app ID. e.g., bmnlcjabgnpnenekpadlanbbkooimhnj
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - ZIP
+              - CRX
+          description: The file format to download.
+          example: ZIP
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The specific version string to download, or `latest` to download the most recent version.
+          example: latest
+        - name: versionCode
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Advanced use-case for Chrome/Edge only. In the very rare case scenario the version is a version_name associated with multiple versionCodes, specify this to download the specific versionCode. Most users should not need to use this.
+      responses:
+        '200':
+          description: The extension file as a binary stream.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+            application/x-chrome-extension:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '429':
+          description: Rate limit exceeded
+  /api/trends:
+    get:
+      description: Get historical data trends for an extension
+      operationId: getExtensionTrends
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Extension / app ID. e.g., bmnlcjabgnpnenekpadlanbbkooimhnj
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+        - name: numDays
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Number of days to fetch. If this number exceeds the max days allowed for your account tier, then it will be reduced the max allowed number.
+          example: 7
+      responses:
+        '200':
+          description: Historical trend data for the extension.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendData'
+        '429':
+          description: Rate limit exceeded
+  /api/reviews:
+    get:
+      description: Retrieve user reviews
+      operationId: getExtensionReviews
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Extension / app ID. e.g., bmnlcjabgnpnenekpadlanbbkooimhnj
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 1
+          description: Pagination. Starts at 1. Up to at most 10 records (100 pages).
+      responses:
+        '200':
+          description: A list of user reviews for the extension.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewsResponse'
+        '429':
+          description: Rate limit exceeded
+  /api/reviews/realtime:
+    get:
+      description:
+        Retrieve the most recent user reviews from the Chrome Web Store, Google Play Store, Edge add-on
+        store, or Firefox add-on store. Unlike `/api/reviews`, this operation will retrieve the latest data from the
+        store's reviews, and may be less reliable. It only supports getting the latest reviews without pagination
+        support.
+      operationId: getExtensionReviewsRealtime
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Extension / app ID. e.g., bmnlcjabgnpnenekpadlanbbkooimhnj
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+        - name: hl
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only relevant for Android. The language code of the reviews to retrieve. If not set, default to en.
+          example: en, es (Spanish), zh-CN (Chinese simplified), vi (Vietnamese)
+      responses:
+        '200':
+          description: A realtime snapshot of user reviews for the extension.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeReviewsResponse'
+        '429':
+          description: Rate limit exceeded
+  /api/submit-extension:
+    post:
+      summary: Submit an extension or app URL to be added to Chrome-Stats
+      description: |
+        Submit a browser extension or app URL to be added to Chrome-Stats.
+
+        The URL must match one of the supported store URL formats for Chrome Web Store, Google Play Store,
+        Microsoft Edge Add-ons, or Firefox Add-ons.
+
+        If the success field returns true, you can use the /api/detail API to get the extension details.
+
+        If the extension already exists in Chrome-Stats, the success field will be true and the operation is a no-op.
+      operationId: submitExtension
+      requestBody:
+        description: JSON payload containing the URL of the extension or app to be added.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: >-
+                    The full store URL of the extension or app. Must match one of the supported
+                    vendor store URL formats (e.g., Chrome Web Store, Google Play Store, Edge
+                    Add-ons, Firefox Add-ons).
+                  example: https://chromewebstore.google.com/detail/extension-name/bmnlcjabgnpnenekpadlanbbkooimhnj
+      responses:
+        '200':
+          description: Result of the submission request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Human-readable status message about the submission.
+                  success:
+                    type: boolean
+                    description: >-
+                      Indicates whether the URL is a valid extension URL.
+                  isNew:
+                    type: boolean
+                    description: >-
+                      Indicates whether the extension is newly added.
+                  link:
+                    type: string
+                    nullable: true
+                    description: >-
+                      Optional link to the existing extension/app details page on Chrome-Stats
+                      if the item is already in the system. Only set when success is false.
+              examples:
+                queued:
+                  summary: URL queued for crawling
+                  value:
+                    message: >-
+                      The requested extension has been added to our queue to crawl. If it is
+                      publicly accessible, the extension will show up on our website within the
+                      next 24-48 hours.
+                    success: true
+                alreadyExists:
+                  summary: Extension already exists in Chrome-Stats
+                  value:
+                    message: The requested extension already exists in our system.
+                    link: /d/bmnlcjabgnpnenekpadlanbbkooimhnj
+                    linkText: Go to Example Extension
+        '429':
+          description: Rate limit exceeded
+  /api/{platform}/ranking:
+    get:
+      summary: Retrieve extension ranking for a namespace
+      operationId: getExtensionRanking
+      description: |
+        Return a list of extensions, sorted by their ranking in the given namespace.
+        A namespace can be the overall-rank, or the type of item in Chrome Web Store (extension, app, or theme), or a category.
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - chrome
+              - android
+              - edge
+              - firefox
+          description: Browser/platform name.
+          example: chrome
+        - name: namespace
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The ranking namespace (e.g., `overall-rank`, `extension-rank`, `app-rank`, `theme-rank`, or category ranking in the format `cat-{category}-rank` such as `cat-lifestyle/shopping-rank`).
+          example: overall-rank
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 1
+          description: Pagination. Starts at 1.
+      responses:
+        '200':
+          description: A list of extensions ranked within the specified namespace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankResponse'
+        '429':
+          description: Rate limit exceeded
+  /api/{platform}/raw-data:
+    get:
+      description: |
+        **(Premium members only)** List available raw data CSVs to download.
+      operationId: listRawData
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - chrome
+              - android
+              - edge
+              - firefox
+          description: Browser/platform name.
+          example: chrome
+        - name: numDays
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Number of days to fetch. This may not exceed the max number of days allowed by your plan.
+          example: 7
+      responses:
+        '200':
+          description: A list of raw data CSV file keys (names).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RawDataList'
+        '429':
+          description: Rate limit exceeded
+  /api/{platform}/download-raw-data:
+    get:
+      operationId: downloadRawData
+      description: |
+        **(Premium members only)** Download a specified raw data CSV.
+
+        Note that this endpoint will redirect to a S3 URL for download, and should not be used within the browser due to CORS restriction.
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - chrome
+              - android
+              - edge
+              - firefox
+          description: Browser/platform name.
+          example: chrome
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The raw data CSV file name provided by the /api/{platform}/raw-data API.
+          example: ranking-stats/2025/ranking-stats-20250508.csv
+      responses:
+        '200':
+          description: The extension file as a binary stream.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '429':
+          description: Rate limit exceeded
+  /api/{platform}/advanced-search:
+    post:
+      description: |
+        **(Premium members only)** Run an advanced search query for extensions or reviews
+      operationId: advancedSearch
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - chrome
+              - android
+              - edge
+              - firefox
+          description: Browser/platform name.
+          example: chrome
+      requestBody:
+        description: The JSON body defining the advanced search query. The best way to construct this query is go to the [Advanced Search page](/chrome/advanced/extension-search) and use the "Export API query" feature. Note that not all fields in the extensions may be available in the response here. Up to at most 10K records (400 pages) can be retrieved per query.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvancedSearchRequest'
+            examples:
+              $ref: '#/components/examples/AdvancedSearchRequestExample'
+      responses:
+        '200':
+          description: Search results matching the query.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvancedSearchResult'
+        '400':
+          description: Invalid request body or query parameters.
+        '429':
+          description: Rate limit exceeded
+  /api/{platform}/search-source:
+    get:
+      summary: Run an advanced search on source codes
+      operationId: searchSourceCode
+      description: |
+        **(Premium members only)** Search for a string within the extension source codes. Note the following limitations:
+        * Only the latest version of each extension is indexed
+        * Only *.js and *.json files (exclude locales/ json files) are indexed
+        * Only files that are <500KB are indexed
+        * Only support Chrome, Edge, and Firefox
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - chrome
+              - edge
+              - firefox
+          description: Browser/platform name.
+          example: chrome
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The string to search for within source code.
+          example: localStorage
+        - name: id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: If specified, limit the search to the source codes for this extension ID.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 1
+          description: Pagination. Start from 1. Up to at most 10K records (400 pages).
+      responses:
+        '200':
+          description: A list of source code matches found.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SourceSearchResult'
+        '429':
+          description: Rate limit exceeded
+
+webhooks:
+  securityScheme:
+    description: |
+      ## Webhook Security with Shared Secret
+
+      Chrome-Stats webhooks support signature verification using a shared secret to ensure the authenticity of webhook requests.
+
+      ### How it works:
+
+      1. When setting up a webhook in the [API Keys console](/myprofile), you can provide an optional shared secret.
+      2. When Chrome-Stats sends a webhook to your endpoint, it will include a signature in the `X-Chrome-Stats-Signature` header.
+      3. This signature is a HMAC SHA-256 hash of the request body, using your shared secret as the key.
+      4. Your server can verify this signature to ensure the webhook was sent by Chrome-Stats and hasn't been tampered with.
+
+      For detailed implementation examples, see the [Webhook Verification](#section/Webhook-Verification) section.
+
+  raw-data-updated:
+    post:
+      summary: (Premium members only) Raw Data Updated Event
+      description: |
+        Webhooks allow you to receive programmatic calls when our data is updated. Webhooks are only configurable for [Premium members](/pricing). You can add your webhook endpoint in the [API Keys console](/myprofile).
+
+        In case the Webhook request failed, we may try calling it again several times. Please ensure that your webhook endpoint returns a success HTTP status code of `200` to avoid unnecessary retries.
+
+        RawDataUpdated webhook is called at least once a day when all the raw data CSVs are available for download.
+        Typically around **UTC 13:00-15:00**, but could be later.
+      requestBody:
+        description: |
+          **raw-data-updated** webhook event payload.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RawDataUpdatedPayload'
+      responses:
+        '200':
+          description: Success - Webhook received and processed successfully.
+
+  tracking:
+    post:
+      summary: (Premium members only) Stats Tracking Event
+      description: |
+        Webhooks allow you to receive programmatic calls when our data is updated. Webhooks are only configurable for [Premium members](/pricing). You can add your webhook endpoint in the [API Keys console](/myprofile).
+
+        In case the Webhook request failed, we may try calling it again several times. Please ensure that your webhook endpoint returns a success HTTP status code of `200` to avoid unnecessary retries.
+
+        Tracking webhook is called at least once a day when the stats for extensions are updated.
+        Typically around **UTC 13:00-15:00**, but could be later.
+      requestBody:
+        description: |
+          **tracking** webhook event payload.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackingPayload'
+      responses:
+        '200':
+          description: Success - Webhook received and processed successfully.
+
+  on-update:
+    post:
+      summary: (Premium members only) Extension Update Event
+      description: |
+        Webhooks allow you to receive programmatic calls when extensions are updated. Webhooks are only configurable for [Premium members](/pricing). You can add your webhook endpoint in the [API Keys console](/myprofile).
+
+        In case the Webhook request failed, we may try calling it again several times. Please ensure that your webhook endpoint returns a success HTTP status code of `200` to avoid unnecessary retries.
+
+        On-update webhook is called when an extension you're tracking has new important data updates, such as name changes, permission changes, risk level changes, etc..
+      requestBody:
+        description: |
+          **on-update** webhook event payload.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnUpdatePayload'
+      responses:
+        '200':
+          description: Success - Webhook received and processed successfully.
+
+  new-reviews:
+    post:
+      summary: (Premium members only) New User Reviews Event
+      description: |
+        Webhooks allow you to receive programmatic calls when extensions are updated. Webhooks are only configurable for [Premium members](/pricing). You can add your webhook endpoint in the [API Keys console](/myprofile).
+
+        In case the Webhook request failed, we may try calling it again several times. Please ensure that your webhook endpoint returns a success HTTP status code of `200` to avoid unnecessary retries.
+
+        New-reviews webhook is called when an extension you're tracking has received a new user review.
+      requestBody:
+        description: |
+          **new-reviews** webhook event payload.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewReviewsPayload'
+      responses:
+        '200':
+          description: Success - Webhook received and processed successfully.
+
+components:
+  schemas:
+    ScreenshotMedia:
+      type: object
+      description: Details for a screenshot media item.
+      properties:
+        screenshot:
+          type: string
+          format: uri
+          description: URL of the screenshot image.
+          example: 'https://lh3.googleusercontent.com/yGbxe4YlD15omKa1_vejkoLncLDeWNrpajsEh6pjJiktSCjBg_DFU5UlFYLfwO_SCfUe6qwG_aNoDX-0uQRHQDtA'
+
+    VideoMedia:
+      type: object
+      description: Details for a video media item, including thumbnail.
+      properties:
+        video:
+          type: string
+          format: uri
+          description: URL of the video (e.g., YouTube embed URL).
+          example: 'https://www.youtube.com/embed/diE6kJriHsg?rel=0&wmode=opaque&enablejsapi=1'
+
+    MediaItem:
+      description: Represents a single media item, which can be either a screenshot or a video with thumbnail.
+      oneOf:
+        - $ref: '#/components/schemas/ScreenshotMedia'
+        - $ref: '#/components/schemas/VideoMedia'
+
+    BasicExtensionItem:
+      type: object
+      description: Represents an alternative item, potentially for another platform or similar functionality. Note that fields might vary slightly by platform in practice, this schema includes common ones and makes platform-specific ones nullable where observed.
+      properties:
+        id:
+          type: string
+          description: Unique ID of the alternative item on its platform.
+          example: 'chhjbpecpncaggjpdakmflnfcopglcmi'
+        name:
+          type: string
+          description: Name of the alternative item.
+          example: 'Rakuten: Get Cash Back For Shopping'
+        logo:
+          type: string
+          format: uri
+          description: URL of the alternative item's logo.
+          example: 'https://lh3.googleusercontent.com/R3pk1oNclcQ0t5eJxAdQxv9A3SOtKdmycyA1ODSNBf0ILn1VxV2VG6t4XVyAnBQ3gLB5ETiv1AHCziEZmEtwpriyUFs'
+        author:
+          type: string
+          description: Author or publisher information for the alternative item.
+          example: 'https://rakuten.com'
+        ratingValue:
+          type: number
+          format: float
+          description: Average user rating for the alternative item.
+          example: 4.888344513381717
+        ratingCount:
+          type: integer
+          description: Total number of ratings for the alternative item.
+          example: 43679
+        userCount:
+          type: integer
+          description: Number of users for the alternative item.
+          example: 3000000
+        version:
+          type: string
+          description: Version of the alternative item.
+          example: '17.0.5'
+
+    DeltaStats:
+      type: object
+      description: Change in key metrics over a period (e.g., one day or one week).
+      properties:
+        userCount:
+          type: integer
+          description: Change in user count.
+          example: 0
+        ratingValue:
+          type: number
+          format: float
+          description: Change in average user rating.
+          example: -0.00013395165128660125
+        ratingCount:
+          type: integer
+          description: Change in total number of ratings.
+          example: -5
+
+    RankingValue:
+      type: object
+      description: Map of ranking keys (e.g., 'overall-rank', 'keyword-...') to integer rank values.
+      additionalProperties:
+        type: integer
+      example:
+        overall-rank: 20
+        extension-rank: 18
+        keyword-browser_extension-rank: 135
+        cat-lifestyle/shopping-rank: 1
+        keyword-paypal-rank: 1
+        featured: 9
+
+    RankingEntry:
+      type: object
+      description: A snapshot of ranking data at a specific time.
+      properties:
+        ts:
+          type: string
+          description: Timestamp for the ranking data (YYYYMMDD format).
+          example: '20250508'
+        value:
+          $ref: '#/components/schemas/RankingValue'
+
+    ReviewSummary:
+      type: object
+      description: A summary of user reviews, including pros, cons, and an overall summary.
+      properties:
+        pros:
+          type: array
+          items:
+            type: string
+          description: List of positive points extracted from reviews.
+          example:
+            - 'Users have saved money using Honey coupons and discounts.'
+        cons:
+          type: array
+          items:
+            type: string
+          description: List of negative points extracted from reviews.
+          example:
+            - 'Honey allegedly does not always find the best coupons and sometimes shows only store-partnered deals.'
+        summary:
+          type: string
+          description: Overall summary of the reviews.
+          example: 'Honey is praised by some users for saving money through coupons and discounts, as well as offering occasional cashback rewards. However, a significant number of reviews accuse Honey of unethical practices, such as stealing affiliate commissions from content creators, manipulating coupon visibility to benefit its partners, and causing website performance issues.'
+
+    Review:
+      type: object
+      description: Details of a single user review.
+      properties:
+        reviewId:
+          type: string
+          description: Unique identifier for the review.
+          example: '31c90d1a-e2af-45ac-ac96-a2be3514c6d7'
+        authorId:
+          type: string
+          description: Unique identifier for the review author.
+          example: 'ALV-UjWRrXZGZpNoiRASoeQiT11h53Ib4EWnqa09dvKM5hs3g9L-ARhj'
+        authorName:
+          type: string
+          description: Anonymized name of the review author.
+          example: 'Anonymous User'
+        authorPicture:
+          type: string
+          format: uri
+          description: Anonymized or placeholder URL of the author's profile picture.
+          example: 'https://example.com/anonymous.png'
+        rating:
+          type: integer
+          description: The star rating given by the author (e.g., 1 to 5).
+          example: 1
+        creationTime:
+          type: integer
+          format: int64
+          description: Unix timestamp (milliseconds) of the review creation time.
+          example: 1746641026000
+        updatedTime:
+          type: integer
+          format: int64
+          description: Unix timestamp (milliseconds) of the review last update time.
+          example: 1746641026000
+        timestamp:
+          type: string
+          format: date
+          description: Date of the review (YYYY-MM-DD format).
+          example: '2025-05-07'
+        numHelpful:
+          type: integer
+          description: Number of users who found the review helpful.
+          example: 3
+        numVoted:
+          type: integer
+          description: Number of users who voted on the review (helpful/not helpful).
+          example: 3
+        version:
+          type: string
+          description: Version of the item the review was left for.
+          example: '17.1.1'
+        body:
+          type: string
+          description: The text content of the review.
+          example: 'Good'
+        lang:
+          type: string
+          description: Language code of the review.
+          example: 'en'
+
+    RealtimeReviewsResponse:
+      type: object
+      description: A realtime snapshot of user reviews for an extension or app.
+      properties:
+        reviews:
+          type: array
+          description: A list of user reviews returned in realtime.
+          items:
+            $ref: '#/components/schemas/Review'
+          example:
+            - reviewId: '6e19bd42-6361-445d-8913-8d2feed74228'
+              authorId: '123456789abcdef'
+              authorName: 'John Doe'
+              authorPicture: 'https://lh3.googleusercontent.com/7JKQtRzFchNfomvdwyw0W2xhYnsSjNhWz7h2HpCihLEy9MjrodV4g0UFJFqBKgf2fZsmPF_rTVz-beAVrrXdsEzK5w'
+              rating: 5
+              creationTime: 1756875085961
+              updatedTime: 1756875085961
+              timestamp: '2025-09-02'
+              ingestionTime: 1764694136894
+              version: '1.0.0'
+              body: 'this app is great'
+
+    DownloadsInfo:
+      type: object
+      description: Information regarding download availability and URLs.
+      properties:
+        enabled:
+          type: boolean
+          description: Indicates if downloads are currently enabled for this item/version.
+          example: true
+        zipUrl:
+          type: string
+          format: uri-reference
+          description: Relative URL path to download the item as a ZIP file.
+          example: '/api/download?id=bmnlcjabgnpnenekpadlanbbkooimhnj&type=ZIP&version=17.1.1'
+        crxUrl:
+          type: string
+          format: uri-reference
+          description: Relative URL path to download the item as a CRX file (Chrome extension format).
+          example: '/api/download?id=bmnlcjabgnpnenekpadlanbbkooimhnj&type=CRX&version=17.1.1'
+
+    EmailChangeEntry:
+      type: object
+      description: Record of a change in the publisher's contact email.
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of the email change (YYYY-MM-DD format).
+          example: '2024-03-01'
+        oldEmail:
+          type: string
+          format: email
+          description: The previous email address.
+          example: 'support@joinhoney.com'
+        newEmail:
+          type: string
+          format: email
+          description: The new email address.
+          example: 'support@paypal.com'
+
+    CrossPlatformData:
+      type: object
+      description: Data related to the item's presence or statistics on other platforms.
+      properties:
+        chrome-stats:
+          $ref: '#/components/schemas/BasicExtensionItem'
+          description: Statistics and details of the related item from the Chrome Web Store.
+          nullable: true # The property might be null or missing if no data for this platform
+        edge-stats:
+          $ref: '#/components/schemas/BasicExtensionItem'
+          description: Statistics and details of the related item from the Microsoft Edge Add-ons store.
+          nullable: true # The property might be null or missing if no data for this platform
+        firefox-stats:
+          $ref: '#/components/schemas/BasicExtensionItem'
+          description: Statistics and details of the related item from the Mozilla Firefox Add-ons store.
+          nullable: true # The property might be null or missing if no data for this platform
+        android-stats:
+          $ref: '#/components/schemas/BasicExtensionItem'
+          description: Statistics and details of the related item from the Google Play Store.
+          nullable: true # The property might be null or missing if no data for this platform
+
+    ManifestSummaryWebAccessibleResource:
+      type: object
+      description: Details for a web accessible resource entry in the manifest summary.
+      properties:
+        resources:
+          type: array
+          items:
+            type: string
+          description: List of resource paths.
+          example: ['checkoutPaypal/*', 'extensionMixinScripts/*']
+        matches:
+          type: array
+          items:
+            type: string
+          description: List of URL patterns the resources can match.
+          example: ['http://*/*', 'https://*/*']
+
+    ManifestSummary:
+      type: object
+      description: Parsed and summarized information extracted from the item's manifest file.
+      properties:
+        meta_version:
+          type: integer
+          description: Meta version of the manifest summary format.
+          example: 2
+        manifest_version:
+          type: integer
+          description: The manifest version used by the item (e.g., Manifest V3).
+          example: 3
+        default_locale:
+          type: string
+          description: The default locale specified in the manifest.
+          example: 'en'
+        has_content_scripts:
+          type: boolean
+          description: Indicates if the manifest declares content scripts.
+          example: true
+        permissions:
+          type: array
+          items:
+            type: string
+          description: List of permissions requested in the manifest.
+          example:
+            [
+              'alarms',
+              'cookies',
+              'storage',
+              'unlimitedStorage',
+              'scripting',
+              'webRequest',
+              'offscreen'
+            ]
+        host_permissions:
+          type: array
+          items:
+            type: string
+          description: List of host permissions requested in the manifest.
+          example: ['http://*/*', 'https://*/*']
+        web_accessible_resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestSummaryWebAccessibleResource'
+          description: List of web accessible resources declared in the manifest.
+          example:
+            - resources:
+                [
+                  'checkoutPaypal/*',
+                  'extensionMixinScripts/*',
+                  'images/*',
+                  'offscreen/*',
+                  'paypal/*',
+                  'proxies/*'
+                ]
+              matches: ['http://*/*', 'https://*/*']
+
+    RankDetail:
+      type: object
+      description: Detailed information about a specific ranking metric.
+      properties:
+        label:
+          type: string
+          description: Human-readable label for the ranking metric.
+          example: 'Overall'
+        type:
+          type: string
+          description: Type of ranking (e.g., "cat", "keyword").
+          example: 'cat'
+        key:
+          type: string
+          description: Identifier key for the ranking metric.
+          example: 'cat-lifestyle/shopping-rank'
+        value:
+          type: integer
+          description: The rank value.
+          example: 1
+        path:
+          type: string
+          format: uri-reference
+          description: Relative URL path associated with the ranking (e.g., category page).
+          example: '/chrome/c/lifestyle%2Fshopping'
+        page:
+          type: integer
+          description: The page number where the rank appears (if applicable).
+          example: 1
+        difficulty:
+          type: number
+          format: float
+          description: An optional difficulty score associated with the rank/keyword.
+          example: 30.635250000000003
+
+    RiskReasonImpact:
+      type: object
+      description: Details for a specific reason contributing to the risk impact score.
+      properties:
+        reason:
+          type: string
+          description: Identifier for the risk reason.
+          example: 'permission-all-sites'
+        description:
+          type: string
+          description: Explanation of the risk reason.
+          example: 'Allows access to all websites, posing a significant security risk as it can monitor and modify data from any visited site.'
+        severity:
+          type: string
+          description: Severity level of the risk reason.
+          example: 'Critical'
+        risk:
+          type: integer
+          description: Risk value associated with this reason (integer for impact).
+          example: 25
+
+    RiskReasonLikelihood:
+      type: object
+      description: Details for a specific reason contributing to the risk likelihood score.
+      properties:
+        reason:
+          type: string
+          description: Identifier for the risk reason.
+          example: 'last-update-recent-month'
+        description:
+          type: string
+          description: Explanation of the risk reason.
+          example: 'This extension was recently updated in the past month. New updates may not be stable or safe.'
+        severity:
+          type: string
+          description: Severity level of the risk reason.
+          example: 'High'
+        risk:
+          type: number
+          format: float
+          description: Risk value associated with this reason (float for likelihood).
+          example: -0.3
+
+    RiskDetails:
+      type: object
+      description: Overall risk assessment details for the item.
+      properties:
+        riskImpact:
+          type: integer
+          description: Overall numerical score for the potential impact of risks. From 0 (Very low risk impact) to 4 (Very high risk impact)
+          example: 3
+        riskImpactReasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskReasonImpact'
+          description: List of reasons contributing to the risk impact score.
+          example:
+            - reason: 'permission-all-sites'
+              description: 'Allows access to all websites...'
+              severity: 'Critical'
+              risk: 25
+        riskLikelihood:
+          type: integer
+          description: Overall numerical score for the likelihood of risks occurring. From 0 (Very low risk likelihood) to 4 (Very high risk likelihood)
+          example: 0
+        riskLikelihoodReasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskReasonLikelihood'
+          description: List of reasons contributing to the risk likelihood score.
+          example:
+            - reason: 'last-update-recent-month'
+              description: 'This extension was recently updated...'
+              severity: 'High'
+              risk: -0.3
+
+    ExtensionDetails:
+      type: object
+      description: Represents detailed information about an item (e.g., browser extension)
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the item on its primary platform.
+          example: 'bmnlcjabgnpnenekpadlanbbkooimhnj'
+        name:
+          type: string
+          description: The full name of the item.
+          example: 'Honey: Automatic Coupons & Rewards'
+        logo:
+          type: string
+          format: uri
+          description: URL of the item's logo image.
+          example: 'https://lh3.googleusercontent.com/7JKQtRzFchNfomvdwyw0W2xhYnsSjNhWz7h2HpCihLEy9MjrodV4g0UFJFqBKgf2fZsmPF_rTVz-beAVrrXdsEzK5w'
+        description:
+          type: string
+          description: A short, summary description of the item.
+          example: 'Save money and earn rewards when you shop online.'
+        fullSummary:
+          type: string
+          description: A detailed summary or description of the item's features and benefits.
+          example: 'Join 17M+ members using PayPal Honey to find deals, earn cash back, and compare prices while you shop. ...'
+        category:
+          type: string
+          description: The category path the item belongs to.
+          example: 'lifestyle/shopping'
+        itemCategory:
+          type: string
+          description: The type of item (e.g., "extension").
+          example: 'extension'
+        userCount:
+          type: integer
+          description: The total number of users who have installed or are using the item.
+          example: 16000000
+        ratingValue:
+          type: number
+          format: float
+          description: The average user rating for the item.
+          example: 4.585858023729493
+        ratingCount:
+          type: integer
+          description: The total number of ratings submitted for the item.
+          example: 179692
+        version:
+          type: string
+          description: The current external version string of the item.
+          example: '17.1.1'
+        versionCode:
+          oneOf:
+            - type: string
+              example: '17.1.1'
+            - type: number
+          description: The internal version code of the item (may match `version`).
+        media:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaItem'
+          description: A list of media items (screenshots and videos) associated with the item.
+          example:
+            - video: 'https://www.youtube.com/embed/diE6kJriHsg?rel=0&wmode=opaque&enablejsapi=1'
+            - screenshot: 'https://lh3.googleusercontent.com/yGbxe4YlD15omKa1_vejkoLncLDeWNrpajsEh6pjJiktSCjBg_DFU5UlFYLfwO_SCfUe6qwG_aNoDX-0uQRHQDtA'
+        smallBanner:
+          type: string
+          format: uri
+          description: URL of a small banner image for the item.
+          example: 'https://lh3.googleusercontent.com/WUDBCzDgjr3iamRWkpAg5FzZZj6aIO2TbNgdhlu5Yuejs5hoU3LpnKN03XRSYeutk_wL9nMBSJqoGQv8In00aexiYA'
+        marqueeBanner:
+          type: string
+          format: uri
+          description: URL of a larger marquee banner image for the item.
+          example: 'https://lh3.googleusercontent.com/KUmoA4wLp-CyoPrID57ieCGwpIQJj2FpenBPVSrLQBDavEbqRErKez932wLiO7Gv39SOvVaPrqIFN75gb66-8Kh7kDc'
+        reviewSummary:
+          $ref: '#/components/schemas/ReviewSummary'
+          description: A summarized overview of user reviews.
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+          description: A list of individual user reviews for the item.
+          example:
+            - reviewId: 'df3971d5-fd95-4a9b-bf79-7144c0b3ba79'
+              authorId: 'ALV-UjUr2rsApTcMlHBs3DztGcHhOSW26lq2Paiy5TTBThLjMbHyW35X'
+              authorName: 'Anonymous User'
+              authorPicture: 'https://example.com/anonymous.png'
+              rating: 1
+              creationTime: 1746575641000
+              updatedTime: 1746575641000
+              timestamp: '2025-05-06'
+              numHelpful: 5
+              numVoted: 6
+              version: '17.1.1'
+              body: 'Test'
+              lang: 'en'
+        url:
+          type: string
+          format: uri
+          description: The main URL for the item's listing page on its platform.
+          example: 'https://chromewebstore.google.com/detail/honey-automatic-coupons-r/bmnlcjabgnpnenekpadlanbbkooimhnj'
+        website:
+          type: string
+          format: uri
+          description: The official website URL associated with the item.
+          example: 'https://www.joinhoney.com'
+        author:
+          type: string
+          description: The author or publisher of the item. This can be a name or URL.
+          example: 'https://www.joinhoney.com'
+        paymentType:
+          type: string
+          description: Indicates how the item is paid for.
+          example: 'free'
+        isFeatured:
+          type: boolean
+          description: Indicates if the item is currently featured on its platform.
+          example: true
+        isTrustedPublisher:
+          type: boolean
+          description: Indicates if the publisher is marked as trusted on its platform.
+          example: true
+        privacyPolicyUrl:
+          type: string
+          format: uri
+          description: URL of the item's privacy policy.
+          example: 'https://www.joinhoney.com/privacy'
+        risk:
+          $ref: '#/components/schemas/RiskDetails'
+          description: Detailed risk assessment for the item based on permissions, updates, popularity, etc.
+          example:
+            riskImpact: 3
+            riskImpactReasons:
+              - reason: 'permission-all-sites'
+                description: 'Allows access to all websites...'
+                severity: 'Critical'
+                risk: 25
+              - reason: 'permission-web-request'
+                description: 'Allows the extension to observe...'
+                severity: 'High'
+                risk: 20
+            riskLikelihood: 0
+            riskLikelihoodReasons:
+              - reason: 'last-update-recent-month'
+                description: 'This extension was recently updated...'
+                severity: 'High'
+                risk: -0.3
+        isDownloadBlocked:
+          type: boolean
+          description: Indicates if downloads for this item are currently blocked on its platform.
+          example: false
+        downloads:
+          $ref: '#/components/schemas/DownloadsInfo'
+          description: Information regarding item downloads.
+          example:
+            enabled: true
+            zipUrl: '/api/download?id=bmnlcjabgnpnenekpadlanbbkooimhnj&type=ZIP&version=17.1.1'
+            crxUrl: '/api/download?id=bmnlcjabgnpnenekpadlanbbkooimhnj&type=CRX&version=17.1.1'
+        related:
+          type: array
+          items:
+            type: string
+          description: A list of IDs of related items on the same platform.
+          example:
+            [
+              'chhjbpecpncaggjpdakmflnfcopglcmi',
+              'nenlahapcbofgnanklpelkaejcehkggg',
+              'kegphgaihkjoophpabchkmpaknehfamb',
+              'emalgedpdlghbkikiaeocoblajamonoh',
+              'pgpdfnkeeppfohmophlpcfmciioeenig',
+              'jjfblogammkiefalfpafidabbnamoknm',
+              'pnedebpjhiaidlbbhmogocmffpdolnek',
+              'gibkoahgjfhphbmeiphbcnhehbfdlcgo',
+              'bkkjeefjfjcfdfifddmkdmcpmaakmelp',
+              'jpdapbcmfllbpojmkefcikllfeoahglb',
+              'cjmfiochlaffhnellbhffgnjocahinnh',
+              'hmgpakheknboplhmlicfkkgjipfabmhp'
+            ]
+        alternatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/BasicExtensionItem'
+          description: A list of alternative items, potentially for other platforms or similar functionality.
+          example:
+            - id: 'chhjbpecpncaggjpdakmflnfcopglcmi'
+              name: 'Rakuten: Get Cash Back For Shopping'
+              logo: 'https://lh3.googleusercontent.com/R3pk1oNclcQ0t5eJxAdQxv9A3SOtKdmycyA1ODSNBf0ILn1VxV2VG6t4XVyAnBQ3gLB5ETiv1AHCziEZmEtwpriyUFs'
+              author: 'https://rakuten.com'
+              ratingValue: 4.888344513381717
+              ratingCount: 43679
+              userCount: 3000000
+            - id: 'kegphgaihkjoophpabchkmpaknehfamb'
+              name: 'Cently: Automatic Coupons + Cashback for Free'
+              logo: 'https://lh3.googleusercontent.com/ADYi74aEbt9tUHE7o4NSBUIsiHyr2PcoiZ9erk3_b6HCq8F9pNGpVo2PBvjZlNoh5ELFxmUq9w_bxU5Z70Sfvn6GkA'
+              author: 'https://couponfollow.com'
+              ratingValue: 4.86950594040122
+              ratingCount: 15403
+              userCount: 100000
+        platform:
+          type: string
+          description: The primary platform the data pertains to (e.g., "chrome").
+          example: 'chrome'
+        lastUpdate:
+          type: string
+          format: date
+          description: The date the item was last updated (YYYY-MM-DD format).
+          example: '2025-04-29'
+        creationDate:
+          type: string
+          format: date
+          description: The date the item was first created or listed (YYYY-MM-DD format).
+          example: '2020-06-30'
+        asOfDate:
+          type: string
+          format: date
+          description: The date the data in this object was current as of (YYYY-MM-DD format).
+          example: '2025-05-08'
+        size:
+          type: integer
+          description: The size of the item's installation package in bytes.
+          example: 6710886
+        supportedLanguages:
+          type: array
+          items:
+            type: string
+          description: A list of language codes indicating supported languages.
+          example: ['de', 'en', 'en-GB', 'en-US', 'fr', 'nl', 'es', 'it', 'pt-BR']
+        helpUrl:
+          type: string
+          format: uri
+          description: URL for help or support resources.
+          example: 'http://help.joinhoney.com'
+        email:
+          type: string
+          format: email
+          description: Contact email address for the publisher.
+          example: 'honey@paypal.com'
+        publisherAddress:
+          type: string
+          description: The physical address of the publisher.
+          example: "2211 N First St\nSan Jose, CA 95131\nUS"
+        publisherCountry:
+          type: string
+          description: The country of the publisher.
+          example: 'US'
+        numScreenshots:
+          type: integer
+          description: The total number of screenshots available (may differ from number in `media` list).
+          example: 5
+        numVideos:
+          type: integer
+          description: The total number of videos available (may differ from number in `media` list).
+          example: 1
+        oneWeekDelta:
+          $ref: '#/components/schemas/DeltaStats'
+          description: Change in key metrics (users, ratings) over the past week.
+          example:
+            userCount: 0
+            ratingValue: -0.00013395165128660125
+            ratingCount: -5
+        oneDayDelta:
+          $ref: '#/components/schemas/DeltaStats'
+          description: Change in key metrics (users, ratings) over the past day.
+          example:
+            userCount: 0
+            ratingValue: -0.000037607054806265694
+            ratingCount: 3
+        ranking:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingEntry'
+          description: Historical ranking data points for the item across various metrics.
+        allRanks:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankDetail'
+          description: Detailed list of current ranks across various categories and keywords.
+        oneWeekAgoRanks:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankDetail'
+          description: Detailed list of ranks from one week ago.
+          example:
+            - label: 'Overall'
+              type: null
+              key: 'overall-rank'
+              value: 20
+              path: '/chrome/top'
+              page: 1
+            - label: 'Shopping'
+              type: 'cat'
+              key: 'cat-lifestyle/shopping-rank'
+              value: 1
+              path: '/chrome/c/lifestyle%2Fshopping'
+              page: 1
+              difficulty: null
+            - label: 'honey'
+              type: 'keyword'
+              key: 'keyword-honey-rank'
+              value: 1
+              path: '/keyword/honey'
+              page: 1
+              difficulty: 30.635250000000003
+        manifestJson:
+          type: string
+          description: The raw content of the item's manifest file as a JSON string.
+          example: "{\n\"update_url\": \"https://clients2.google.com/service/update2/crx\",\n\n  \"manifest_version\": 3,\n  \"name\": \"__MSG_Honey_Title__\",\n  \"version\": \"17.1.1\",\n  \"description\": \"__MSG_Automatically_find_and_apply_coupon_codes_when_you_shop_online__\",\n  \"default_locale\": \"en\",\n  \"content_security_policy\": {\n    \"extension_pages\": \"script-src 'self'; object-src 'self';\",\n    \"isolated_world\": \"script-src 'self'; object-src 'self';\"\n  },\n  \"background\": {\n    \"service_worker\": \"h0.js\"\n  },\n  \"content_scripts\": [\n    {\n      \"js\": [\n        \"h1-check.js\"\n      ],\n      \"run_at\": \"document_end\",\n      \"match_about_blank\": false,\n      \"all_frames\": false,\n      \"matches\": [\n        \"http://*/*\",\n        \"https://*/*\"\n      ]\n    }\n  ],\n  \"web_accessible_resources\": [\n    {\n      \"resources\": [\n        \"checkoutPaypal/*\",\n        \"extensionMixinScripts/*\",\n        \"images/*\",\n        \"offscreen/*\",\n        \"paypal/*\",\n        \"proxies/*'\"\n      ],\n      \"matches\": [\n        \"http://*/*\",\n        \"https://*/*\"\n      ]\n    }\n  ],\n  \"permissions\": [\n    \"alarms\",\n    \"cookies\",\n    \"storage\",\n    \"unlimitedStorage\",\n    \"scripting\",\n    \"webRequest\",\n    \"offscreen\"\n  ],\n  \"host_permissions\": [\n    \"http://*/*\",\n    \"https://*/*\"\n  ],\n  \"icons\": {\n    \"16\": \"icons/honey-logo-16.png\",\n    \"48\": \"icons/honey-logo-48.png\",\n    \"128\": \"icons/honey-logo-128.png\"\n  },\n  \"action\": {\n    \"default_title\": \"PayPal Honey\",\n    \"default_icon\": {\n      \"16\": \"icons/default-16.png\",\n      \"19\": \"icons/default-19.png\",\n      \"32\": \"icons/default-32.png\",\n      \"38\": \"icons/default-38.png\"\n    },\n    \"default_popup\": \"popover/popover.html\"\n  }\n}"
+        manifestSummary:
+          $ref: '#/components/schemas/ManifestSummary'
+          description: A parsed and summarized representation of the item's manifest file.
+        categoryLabel:
+          type: string
+          description: A simple, human-readable label for the item's primary category (redundant with `category` but present).
+          example: 'Shopping'
+        fetchId:
+          type: string
+          description: Identifier for the specific data fetch that generated this object.
+          example: '20250508'
+        emailChangeHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailChangeEntry'
+          description: A history of changes to the publisher's contact email address.
+        crossPlatformData:
+          $ref: '#/components/schemas/CrossPlatformData'
+          description: Data related to the item's presence or statistics on other platforms.
+          example:
+            edge-stats:
+              id: 'amnbcmdbanbkjhnfoeceemmmdiepnbpp'
+              logo: 'https://store-images.s-microsoft.com/image/apps.26191.955b81ce-4253-43e5-a7b4-90850488f341.6e305c32-76af-4b85-914a-352f396981de.f6ac67a6-de0e-4382-9b36-bbf5cc224e6a'
+              name: 'PayPal Honey: Automatic Coupons & Cash Back'
+              url: 'https://microsoftedge.microsoft.com/addons/detail/amnbcmdbanbkjhnfoeceemmmdiepnbpp'
+              version: '17.0.5'
+              description: 'Save money and earn rewards when you shop online.'
+              userCount: 5158344
+              lastUpdate: '2025-03-04'
+              website: 'https://www.joinhoney.com'
+              author: 'Honey Science Corporation'
+              authorId: '48485180'
+              itemCategory: 'extension'
+              category: 'Shopping'
+              ratingValue: 4
+              ratingCount: 2651
+              size: 6829854
+            firefox-stats:
+              id: 'honey'
+              logo: 'https://addons.mozilla.org/user-media/addon_icons/415/415198-64.png?modified=mcrushed'
+              name: 'Honey'
+              author: 'Honey'
+              url: 'https://addons.mozilla.org/firefox/addon/honey/'
+              version: '12.8.4'
+              size: 3215862
+              description: 'Automatically find and try coupon codes with 1-click. Works at thousands of stores in the US, Canada, Australia, India and the UK.'
+              userCount: 469221
+              lastUpdate: '2021-06-23'
+              website: 'http://www.joinhoney.com'
+              email: 'firefoxextension@paypal.com'
+              authorId: '6822410'
+              itemCategory: 'extension'
+              privacyPolicyUrl: 'https://addons.mozilla.org/firefox/addon/honey/privacy/'
+              ratingValue: 2.9235
+              ratingCount: 7904
+              ratingWithReviewCount: 3921
+              firefoxAddOnGuid: 'jid1-93CWPmRbVPjRQA@jetpack'
+              firefoxAddOnNumericId: 415198
+              creationDate: '2013-01-05'
+
+    ListVersionsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier of the item (e.g., extension ID).
+          example: bmnlcjabgnpnenekpadlanbbkooimhnj
+        name:
+          type: string
+          description: The name of the item.
+          example: Honey
+        author:
+          type: string
+          description: The author or publisher of the item.
+          example: https://www.joinhoney.com
+        description:
+          type: string
+          description: A brief description of the item.
+          example: Save money and earn rewards when you shop online.
+        email:
+          type: string
+          description: The contact email for the item.
+          format: email
+          example: honey@paypal.com
+        logo:
+          type: string
+          description: URL to the item's logo image.
+          format: url
+          example: https://lh3.googleusercontent.com/7JKQtRzFchNfomvdwyw0W2xhYnsSjNhWz7h2HpCihLEy9MjrodV4g0UFJFqBKgf2fZsmPF_rTVz-beAVrrXdsEzK5w
+        ratingValue:
+          type: number
+          format: float
+          description: The average rating value of the item.
+          example: 4.585858023729493
+        ratingCount:
+          type: integer
+          description: The total number of ratings.
+          example: 179692
+        userCount:
+          type: integer
+          description: The total number of users or downloads.
+          example: 16000000
+        version:
+          type: string
+          description: The current version of the item.
+          example: 17.1.1
+        versionCode:
+          oneOf:
+            - type: string
+              example: '17.1.1'
+            - type: number
+          description: The current version code of the item. In some rare cases, a version may be associated
+              with multiple version codes.
+        size:
+          type: integer
+          description: The size of the item in bytes.
+          example: 6710886
+        platform:
+          type: string
+          description: The platform the item runs on.
+          example: chrome
+        downloads:
+          type: object
+          description: Download statistics and version information.
+          properties:
+            totalDownloadCount:
+              type: integer
+              description: Total number of downloads across all versions.
+              example: 1262
+            allVersions:
+              type: array
+              description: List of all available versions and their details.
+              items:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    description: The version number.
+                    example: 17.1.1
+                  versionCode:
+                    oneOf:
+                      - type: string
+                        example: '17.1.1'
+                      - type: number
+                    description: The current version code of the item. In some rare cases, a version may be associated
+                      with multiple version codes.
+                  timestamp:
+                    type: string
+                    description: The timestamp of the version release or update.
+                    format: date
+                    example: 2025-04-29
+                  size:
+                    type: integer
+                    description: The size of this version in bytes.
+                    example: 6710886
+                  types:
+                    type: array
+                    description: List of available download types for this version.
+                    items:
+                      type: string
+                      example: CRX
+                  count:
+                    type: integer
+                    description: A count related to this specific version (e.g., downloads of this version).
+                    example: 0
+                  crxUrl:
+                    type: string
+                    description: Relative URL to download the CRX file for this version.
+                    format: url
+                    example: /d/bmnlcjabgnpnenekpadlanbbkooimhnj/download-thank?type=CRX&version=17.1.1
+                  url:
+                    type: string
+                    description: Relative URL to download the ZIP file for this version.
+                    format: url
+                    example: /d/bmnlcjabgnpnenekpadlanbbkooimhnj/download-thank?type=ZIP&version=17.1.1
+            latestCrxUrl:
+              type: string
+              description: Relative URL to download the latest CRX version.
+              format: url
+              example: /d/bmnlcjabgnpnenekpadlanbbkooimhnj/download-thank?type=CRX&version=17.1.1
+            latestZipUrl:
+              type: string
+              description: Relative URL to download the latest ZIP version.
+              format: url
+              example: /d/bmnlcjabgnpnenekpadlanbbkooimhnj/download-thank?type=ZIP&version=17.1.1
+            enabled:
+              type: boolean
+              description: Indicates if downloads are currently enabled for this item.
+              example: true
+
+    ReviewsResponse:
+      type: object
+      description: Comprehensive details and reviews for an extension.
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the extension.
+          example: 'bmnlcjabgnpnenekpadlanbbkooimhnj'
+        name:
+          type: string
+          description: The name of the extension.
+          example: 'Honey: Automatic Coupons & Rewards'
+        url:
+          type: string
+          description: The URL where the extension can be found or installed.
+          format: url
+          example: 'https://chromewebstore.google.com/detail/honey-automatic-coupons-r/bmnlcjabgnpnenekpadlanbbkooimhnj'
+        description:
+          type: string
+          description: A brief description of the extension's functionality.
+          example: 'Save money and earn rewards when you shop online.'
+        ratingValue:
+          type: number
+          format: float
+          description: The average rating score of the extension.
+          example: 4.585858023729493
+        ratingCount:
+          type: integer
+          description: The total number of ratings submitted for the extension.
+          example: 179692
+        userCount:
+          type: integer
+          description: The total number of users who have installed or are using the extension.
+          example: 16000000
+        author:
+          type: string
+          description: The author or publisher of the extension.
+          example: 'https://www.joinhoney.com'
+        category:
+          type: string
+          description: The technical category path for the extension.
+          example: 'lifestyle/shopping'
+        email:
+          type: string
+          description: The contact email for the extension or publisher.
+          format: email
+          example: 'honey@paypal.com'
+        logo:
+          type: string
+          description: URL for the extension's logo image.
+          format: url
+          example: 'https://lh3.googleusercontent.com/7JKQtRzFchNfomvdwyw0W2xhYnsSjNhWz7h2HpCihLEy9MjrodV4g0UFJFqBKgf2fZsmPF_rTVz-beAVrrXdsEzK5w'
+        version:
+          type: string
+          description: The current version of the extension.
+          example: '17.1.1'
+        itemCategory:
+          type: string
+          description: The type of item (e.g., 'extension').
+          example: 'extension'
+        platform:
+          type: string
+          description: The platform the extension runs on (e.g., 'chrome').
+          example: 'chrome'
+        numReviewsPerPage:
+          type: integer
+          description: The number of reviews returned per page in the 'reviews' list.
+          example: 100
+        numReviews:
+          type: integer
+          description: The total number of text reviews submitted for the extension.
+          example: 7626
+        recentRatingAverage:
+          type: number
+          format: float
+          description: The average rating calculated from recent reviews.
+          example: 1.65
+        reviewSummary:
+          type: object
+          description: A summary of common positive and negative points from reviews, plus an overall summary.
+          properties:
+            pros:
+              type: array
+              items:
+                type: string
+              description: A list of positive points frequently mentioned in reviews.
+              example:
+                - 'Users have saved money using Honey coupons and discounts.'
+                - "Some users have received significant discounts (e.g. 40% at Victoria's Secret)."
+            cons:
+              type: array
+              items:
+                type: string
+              description: A list of negative points frequently mentioned in reviews.
+              example:
+                - 'Multiple accusations of Honey being a scam related to stealing affiliate commissions from content creators and sellers.'
+                - 'Honey allegedly does not always find the best coupons and sometimes shows only store-partnered deals.'
+            summary:
+              type: string
+              description: An overall summary of the reviews sentiment.
+              example: 'Honey is praised by some users for saving money through coupons and discounts, as well as offering occasional cashback rewards. However, a significant number of reviews accuse Honey of unethical practices, such as stealing affiliate commissions from content creators, manipulating coupon visibility to benefit its partners, and causing website performance issues. These concerns have led to warnings about Honey being a scam and calls for its removal or avoidance by some users.'
+        reviews:
+          type: array
+          description: A list of individual user reviews for the extension.
+          items:
+            $ref: '#/components/schemas/Review'
+          example:
+            - reviewId: '31c90d1a-e2af-45ac-ac96-a2be3514c6d7'
+              authorId: 'ALV-UjWRrXZGZpNoiRASoeQiT11h53Ib4EWnqa09dvKM5hs3g9L-ARhj'
+              authorName: 'Anonymous User'
+              authorPicture: 'https://example.com/anonymous.png'
+              rating: 1
+              creationTime: 1746641026000
+              updatedTime: 1746641026000
+              timestamp: '2025-05-07'
+              ingestionTime: 1746706590990
+              numHelpful: 3
+              numVoted: 3
+              version: '17.1.1'
+              body: 'scam scam scam scam steal the hard work of people !'
+              lang: 'en'
+              fetchId: '20250508'
+              id: 'bmnlcjabgnpnenekpadlanbbkooimhnj'
+              isBadReviewer: false
+            - reviewId: 'df3971d5-fd95-4a9b-bf79-7144c0b3ba79'
+              authorId: 'ALV-UjUr2rsApTcMlHBs3DztGcHhOSW26lq2Paiy5TTBThLjMbHyW35X'
+              authorName: 'Anonymous User'
+              authorPicture: 'https://example.com/anonymous.png'
+              rating: 1
+              creationTime: 1746575641000
+              updatedTime: 1746575641000
+              timestamp: '2025-05-06'
+              ingestionTime: 1746621374365
+              numHelpful: 0
+              numVoted: 0
+              version: '17.1.1'
+              body: 'scam'
+              lang: 'en'
+              fetchId: '20250507'
+              id: 'bmnlcjabgnpnenekpadlanbbkooimhnj'
+              isBadReviewer: false
+        reviewsSummary:
+          type: object
+          description: A breakdown of the number of reviews for each rating score (1-5 stars). Keys are string representations of the rating.
+          additionalProperties:
+            type: integer
+          example:
+            '1': 2606
+            '2': 213
+            '3': 191
+            '4': 292
+            '5': 4324
+
+    TrendData:
+      type: object
+      description: Represents the trends data for a single item, including current snapshot and historical series.
+      properties:
+        id:
+          type: string
+          description: The unique identifier of the item.
+          example: 'bmnlcjabgnpnenekpadlanbbkooimhnj'
+        name:
+          type: string
+          description: The name of the item.
+          example: 'Honey: Automatic Coupons & Rewards'
+        description:
+          type: string
+          description: A brief description of the item.
+          example: 'Save money and earn rewards when you shop online.'
+        author:
+          type: string
+          description: The author or publisher of the item.
+          example: 'https://www.joinhoney.com'
+        email:
+          type: string
+          description: Contact email for the item publisher.
+          format: email
+          example: 'honey@paypal.com'
+        logo:
+          type: string
+          description: URL for the item's logo image.
+          format: url
+          example: 'https://lh3.googleusercontent.com/7JKQtRzFchNfomvdwyw0W2xhYnsSjNhWz7h2HpCihLEy9MjrodV4g0UFJFJFqBKgf2fZsmPF_rTVz-beAVrrXdsEzK5w'
+        userCount:
+          type: integer
+          description: The current total number of users.
+          example: 16000000
+        ratingValue:
+          type: number
+          format: double
+          description: The current average rating value.
+          example: 4.585858023729493
+        ratingCount:
+          type: integer
+          description: The current total number of ratings.
+          example: 179692
+        overallRank:
+          type: integer
+          description: The current overall rank of the item.
+          example: 20
+        category:
+          type: string
+          description: The category the item belongs to.
+          example: 'lifestyle/shopping'
+        itemCategory:
+          type: string
+          description: The type of item (e.g., 'extension').
+          example: 'extension'
+        version:
+          type: string
+          description: The current version of the item.
+          example: '17.1.1'
+        platform:
+          type: string
+          description: The platform the data is for (e.g., 'chrome').
+          example: 'chrome'
+        numDays:
+          type: integer
+          description: The number of historical days included in the stats and ranking arrays.
+          example: 90
+        stats:
+          type: array
+          description: Historical daily statistics for the item.
+          items:
+            $ref: '#/components/schemas/DailyStats'
+        ranking:
+          type: array
+          description: Historical daily ranking data for the item across various metrics and keywords.
+          items:
+            $ref: '#/components/schemas/DailyRanking'
+        versions:
+          type: array
+          description: Historical version changes with timestamps.
+          items:
+            $ref: '#/components/schemas/VersionHistory'
+        allRanks:
+          type: array
+          description: A detailed breakdown of the item's current ranks across different categories and keywords.
+          items:
+            $ref: '#/components/schemas/DetailedRank'
+
+    DailyStats:
+      type: object
+      description: Daily statistics for the item.
+      required:
+        - ts
+        - value
+      properties:
+        ts:
+          type: string
+          description: The timestamp for the data (YYYYMMDD format).
+          example: '20250508'
+        value:
+          type: object
+          description: The statistical values for the given timestamp.
+          required:
+            - userCount
+            - rating
+            - ratingCount
+            - version
+            - size
+          properties:
+            userCount:
+              type: integer
+              description: The number of users on this day.
+              example: 16000000
+            rating:
+              type: number
+              format: double
+              description: The average rating value on this day.
+              example: 4.585858023729493
+            ratingCount:
+              type: integer
+              description: The number of ratings on this day.
+              example: 179692
+            version:
+              type: string
+              description: The item version on this day.
+              example: '17.1.1'
+            size:
+              type: integer
+              description: The size of the item in bytes on this day.
+              example: 6710886
+
+    DailyRanking:
+      type: object
+      description: Daily ranking data for the item across various dimensions.
+      required:
+        - ts
+        - value
+      properties:
+        ts:
+          type: string
+          description: The timestamp for the data (YYYYMMDD format).
+          example: '20250508'
+        value:
+          type: object
+          description: Key-value pairs representing different ranks. Keys are rank identifiers (e.g., 'overall-rank', 'keyword-honey-rank'), values are integer ranks.
+          additionalProperties:
+            type: integer
+            description: The rank value.
+          example:
+            overall-rank: 20
+            cat-lifestyle/shopping-rank: 1
+            keyword-honey-rank: 1
+
+    VersionHistory:
+      type: object
+      description: Records a specific version release with its timestamp.
+      required:
+        - version
+        - ts
+      properties:
+        version:
+          type: string
+          description: The item version number.
+          example: '17.1.1'
+        ts:
+          type: string
+          description: The timestamp when this version was active (YYYYMMDD format).
+          example: '20250430'
+
+    DetailedRank:
+      type: object
+      description: Detailed information about a specific current rank entry.
+      required:
+        - label
+        - type
+        - key
+        - value
+        - path
+        - page
+      properties:
+        label:
+          type: string
+          description: Human-readable label for the rank (e.g., 'Overall', 'Shopping').
+          example: 'Overall'
+        type:
+          type: string
+          description: The type of rank (e.g., 'Overall', 'cat', 'keyword').
+          example: 'Overall'
+        key:
+          type: string
+          description: The internal key identifier for the rank (e.g., 'overall-rank').
+          example: 'overall-rank'
+        value:
+          type: integer
+          description: The current rank value.
+          example: 20
+        path:
+          type: string
+          description: URL path associated with this rank's source page.
+          example: '/chrome/top'
+        page:
+          type: integer
+          description: The page number on the source page where the item is ranked.
+          example: 1
+        difficulty:
+          type: number
+          format: double
+          description: (Optional) Difficulty score associated with the rank metric (e.g., keyword difficulty).
+          example: 30.643
+
+    RankResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          description: List of items, sorted by rank.
+          items:
+            $ref: '#/components/schemas/RankItem'
+        total:
+          type: integer
+          description: Total number of items available.
+          example: 223034
+      required:
+        - items
+        - total
+
+    RankItem:
+      type: object
+      description: Details of a single ranked item (e.g., Chrome Extension or App).
+      properties:
+        rank:
+          type: integer
+          description: The rank of the item in the list. Lower number means higher rank.
+          example: 1
+        name:
+          type: string
+          description: The name of the item.
+          example: 'Adobe Acrobat: PDF edit, convert, sign tools'
+        description:
+          type: string
+          description: A short description of the item.
+          example: 'Do more in Google Chrome with Adobe Acrobat PDF tools. View, fill, comment, sign, and try convert and compress tools.'
+        logo:
+          type: string
+          format: url
+          description: URL to the item's logo image.
+          example: 'https://lh3.googleusercontent.com/aqahGz3euXadmtmp8NZnuKPoUm4cmewNY0AI1a_cMsC28cfB2Bx3NArY9Mi50o2zF45Uh74Rmmw-Bh6dJRsVAbm'
+        userCount:
+          type: integer
+          description: The number of users for the item.
+          example: 319000000
+        ratingValue:
+          type: number
+          format: float
+          description: The average rating value of the item.
+          example: 4.399299751922164
+        ratingCount:
+          type: integer
+          description: The total number of ratings for the item.
+          example: 56837
+        lastUpdate:
+          type: string
+          format: date
+          description: The date of the item's last update.
+          example: '2025-05-05'
+        isRecentlyUpdated:
+          type: boolean
+          description: Indicates if the item was recently updated.
+          example: true
+        version:
+          type: string
+          description: The visible version string of the item.
+          example: '25.5.1.0'
+        itemCategory:
+          type: string
+          description: The type of item (e.g., extension, application).
+          enum:
+            - extension
+            - application
+          example: 'extension'
+        category:
+          type: string
+          description: The category the item belongs to.
+          example: 'productivity/workflow'
+        url:
+          type: string
+          format: url
+          description: The URL of the item on the Chrome Web Store.
+          example: 'https://chromewebstore.google.com/detail/adobe-acrobat-pdf-edit-co/efaidnbmnnnibpcajpcglclefindmkaj'
+        id:
+          type: string
+          description: The unique identifier for the item (extension/app ID).
+          example: 'efaidnbmnnnibpcajpcglclefindmkaj'
+        author:
+          type: string
+          description: The author or publisher name/URL.
+          example: 'https://www.adobe.com'
+        website:
+          type: string
+          format: url
+          description: The official website URL for the item or publisher.
+          example: 'https://www.adobe.com'
+        size:
+          type: integer
+          description: The size of the item in bytes.
+          example: 2841641
+
+    RawDataList:
+      type: object
+      properties:
+        files:
+          type: array
+          description: A list of different categories of raw data files available.
+          items:
+            $ref: '#/components/schemas/FileType'
+
+    FileType:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Human-readable label for the file type.
+          example: 'Full extension stats'
+        description:
+          type: string
+          description: A detailed description of the contents of this file type.
+          example: 'contains the high level metadata for each active extension (very large CSV with 50+ columns!)'
+        value:
+          type: string
+          description: Internal identifier for the file type.
+          example: 'full'
+        files:
+          type: array
+          description: A list of individual files available for this type, typically representing daily snapshots.
+          items:
+            $ref: '#/components/schemas/IndividualFile'
+
+    IndividualFile:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the file.
+          example: 'ranking-stats-20250508.csv'
+        size:
+          type: integer
+          format: int64
+          description: The size of the file in bytes.
+          example: 729964647
+        key:
+          type: string
+          description: The unique key or path to the file, likely used for retrieval.
+          example: 'ranking-stats/2025/ranking-stats-20250508.csv'
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the search result (extension/app/theme).
+        name:
+          type: string
+          description: The name of the search result.
+        userCount:
+          type: number
+          description: User count (example shows this).
+        ratingValue:
+          type: number
+          format: float
+          description: Rating value (example shows this).
+      required:
+        - id
+        - name
+
+    AdvancedSearchRequest:
+      type: object
+      properties:
+        sorting:
+          type: string
+          description: The column name to sort results by.
+          example: userCount
+        sortDirection:
+          type: string
+          enum:
+            - asc
+            - desc
+          description: The direction of sorting.
+          example: desc
+        index:
+          type: string
+          enum:
+            - extension
+            - reviews
+          description: The type of data to search (extensions or reviews).
+          example: extension
+        fields:
+          $ref: '#/components/schemas/SearchFields'
+        page:
+          type: number
+          description: (Optional) The page number (starting at 1)
+          example: 1
+      required:
+        - sorting
+        - sortDirection
+        - index
+        - fields
+
+    SearchFields:
+      type: object
+      properties:
+        operator:
+          type: string
+          enum:
+            - AND
+            - OR
+          description: The logical operator for combining conditions.
+          example: AND
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchCondition'
+          description: A list of search conditions.
+      required:
+        - operator
+        - conditions
+
+    SearchCondition:
+      type: object
+      properties:
+        column:
+          type: string
+          description: The column/field to apply the condition to.
+          example: userCount
+        operator:
+          type: string
+          enum:
+            - '='
+            - '!='
+            - '>'
+            - '>='
+            - '<'
+            - '<='
+            - 'One of'
+            - 'Contains'
+            - 'Not contains'
+            - 'Exists'
+            - 'Not exists'
+          description: The comparison or existence operator.
+          example: '>='
+        value:
+          description: The value to compare against. Ignored for 'Exists' and 'Not exists'.
+          nullable: true # Value can be null or absent for Exists/Not exists
+          example: 100000
+      required:
+        - column
+        - operator
+
+    AdvancedSearchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          description: The list of results (either ExtensionDetails or Review objects based on the 'index' parameter).
+          items:
+            oneOf: # Results can be extensions or reviews
+              - $ref: '#/components/schemas/ExtensionDetails'
+              - $ref: '#/components/schemas/Review'
+        total:
+          type: number
+          description: The total number of results matching the query.
+
+    SourceSearchResult:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of search results found across all pages.
+          example: 10000
+        items:
+          type: array
+          description: List of search result items.
+          items:
+            type: object
+            properties:
+              filename:
+                type: string
+                description: The name of the file where the source was found.
+                example: 'localStorage-proxy.js'
+              version:
+                type: string
+                description: The version of the source item (e.g., add-on version).
+                example: '2.2'
+              highlight:
+                type: object
+                description: Information about highlighted occurrences of the search query within the content.
+                properties:
+                  content:
+                    type: array
+                    description: |
+                      List of snippets from the file content with search terms highlighted.
+                      Content is HTML escaped and may contain `<em>` tags for highlighting.
+                    items:
+                      type: string
+                    example:
+                      - "/* globals Storage, chrome */\\n/*\\n * Replace the global <em>localStorage</em> object with a fake <em>localStorage</em> implementation"
+                      - "async\\n * chrome.storage.sync without having to restructure the code that uses\\n * the synchronous <em>localStorage</em>."
+                      - "* If you use <em>localStorage</em> BEFORE it is ready, then a TypeError will be thrown.\\n */\\n(function() {"
+                      - 'Using <em>localStorage</em> before initialization is an error.'
+                additionalProperties: false
+              id:
+                type: string
+                description: Unique identifier for the source item (e.g., an extension ID or repository hash).
+                example: 'ijglncoabcgieiokjmgdogpefdblmnle'
+              timestamp:
+                type: integer
+                format: int64
+                description: Timestamp when the source item was processed or last updated (milliseconds since epoch).
+                example: 1725078055098
+              content:
+                type: string
+                description: The full content of the file. Note that this can be large.
+                example: "/* globals Storage, chrome */\\n/*\\n * Replace the global localStorage object with a fake localStorage implementation\\n * that is backed by chrome.storage.sync\\n *\\n * Note: This wrapper is just an easy hack to transition to the async\\n * chrome.storage.sync without having to restructure the code that uses\\n * the synchronous localStorage.\\n *\\n * The global window.localStoragePromise promise is resolved when the fake\\n * localStorage is available (typically within a few milliseconds).\\n * If you use localStorage BEFORE it is ready, then a TypeError will be thrown.\\n */\\n(function(){\\n    'use strict';\\n    // Uninitialized. Using \"localStorage\" before initialization is an error.\\n    var storage;\\n\\n    (function(){\\n        // Migrate from previous version of the add-on, that used the real\\n        // localStorage object to persist preferences.\\n        var localStorageKeyCount = localStorage.length;\\n        storage = {};\\n        for (var i = localStorageKeyCount; i > 0; --i) {\\n            var key = localStorage.key(0);\\n            if (!storage.hasOwnProperty(key)) {\\n                storage[key] = localStorage.getItem(key);\\n            }\\n            localStorage.removeItem(key);\\n        }\\n        if (localStorageKeyCount > 0) {\n            synchronize();\\n        }\\n    })();\\n\\n    // Replace the storage methods with a custom version that delegates the actual storage\\n    // to the main page\\n    Storage.prototype.setItem = setItem;\\n    Storage.prototype.getItem = getItem;\\n    Storage.prototype.removeItem = removeItem;\\n    function setItem(key, value) {\\n        value += ''; // Coerce to string for consistency with localStorage\\n        storage[key] = value;\\n        synchronize();\\n    }\\n    function getItem(key) {\\n        return storage.hasOwnProperty(key) ? storage[key] : null;\\n    }\\n    function removeItem(key) {\\n        delete storage[key];\\n        synchronize();\\n    }\\n    function synchronize() {\\n        chrome.storage.sync.set({\\n            localStorageData: storage\\n        });\\n    }\\n\\n    window.localStoragePromise = new Promise(function(resolve){\\n        chrome.storage.sync.get({\\n            localStorageData: {}\\n        }, function(items){\\n            storage = items.localStorageData || {};\\n            // Notify users that the storage is ready.\\n            resolve();\\n        });\\n    });\\n\\n    chrome.storage.onChanged.addListener(function(changes){\\n        if (changes.localStorageData) {\\n            storage = changes.localStorageData.newValue || {};\\n        }\\n    });\\n})();\\n"
+
+    RawDataUpdatedPayload:
+      type: object
+      description: The payload sent for the raw data updated event.
+      properties:
+        event:
+          type: string
+          description: The type of event that occurred.
+          enum:
+            - raw-data-updated
+          example: raw-data-updated
+        date:
+          type: string
+          description: The date for which the data was updated (YYYY-MM-DD).
+          format: date
+          example: '2025-01-27'
+      required:
+        - event
+        - date
+
+    TrackingPayload:
+      type: object
+      description: The payload sent for the tracking event.
+      properties:
+        event:
+          type: string
+          description: The type of event that occurred.
+          enum:
+            - tracking
+          example: tracking
+        date:
+          type: string
+          description: The date for which the tracking data is provided (YYYY-MM-DD).
+          format: date
+          example: '2025-06-06'
+        extensions:
+          type: array
+          description: List of extensions being tracked.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: The extension ID.
+                example: 'cbapcdnkcgiajboppakkhjmdolbkinge'
+              name:
+                type: string
+                description: The name of the extension.
+                example: 'ChatbotsPlace AI Hub'
+              version:
+                type: string
+                description: The current version of the extension.
+                example: '1.8.7'
+              logo:
+                type: string
+                description: URL to the extension's logo.
+                example: 'https://lh3.googleusercontent.com/7WolsCObi9vsu8Dzfay70X8rEyI52H0mtLt05zGlHKwdKcrbr0Q-rUB1AMNVRv0Jj_GX2-EMQ3DbKD4vG-aaJ7QX'
+              url:
+                type: string
+                description: URL to the extension's detail page.
+                example: 'https://chromewebstore.google.com/detail/chatbotsplace-ai-hub/cbapcdnkcgiajboppakkhjmdolbkinge'
+              description:
+                type: string
+                description: Description of the extension.
+                example: 'Use ChatGPT, Claude, Grok, Gemini, and DeepSeek from your browser sidebar'
+              userCount:
+                type: integer
+                description: Number of users of the extension.
+                example: 100000
+              lastUpdate:
+                type: string
+                description: Date when the extension was last updated.
+                format: date
+                example: '2025-06-02'
+              helpUrl:
+                type: string
+                description: URL to the extension's help page.
+                example: 'https://chatbotsplace.com/contact'
+              size:
+                type: integer
+                description: Size of the extension in bytes.
+                example: 1111491
+              email:
+                type: string
+                description: Contact email for the extension.
+                example: 'support@chatbotsplace.com'
+              category:
+                type: string
+                description: Category of the extension.
+                example: 'productivity/tools'
+              itemCategory:
+                type: string
+                description: Type of the item.
+                example: 'extension'
+              privacyPolicyUrl:
+                type: string
+                description: URL to the extension's privacy policy.
+                example: 'https://chatbotsplace.com/privacy'
+              smallBanner:
+                type: string
+                description: URL to the extension's small banner image.
+                example: 'https://lh3.googleusercontent.com/4PW2kjPF9_-8omwKiKOe1zAFDbflyU1Qaog1s9leKxNz_pPzbS2SseTXAjvCdZDux1Tb8n3SgfjfIVmQHoi7aZQH'
+              marqueeBanner:
+                type: string
+                description: URL to the extension's marquee banner image.
+                example: 'https://lh3.googleusercontent.com/Y33CgJFo1iYeE1jXX61xHofoT7US0FtXXrVZ_AaDHAZ6rFdjwoE6z3bThHTdrvB0TkJoTOIaAHZ2MZrJp6nCukNTF80'
+              ratingValue:
+                type: number
+                format: float
+                description: Average rating of the extension.
+                example: 4.333333333333333
+              ratingCount:
+                type: integer
+                description: Number of ratings for the extension.
+                example: 6
+              versionCode:
+                oneOf:
+                  - type: string
+                  - type: number
+                description: Version code of the extension.
+                example: '1.8.7'
+              author:
+                type: string
+                description: Author of the extension.
+                example: 'https://chatbotsplace.com'
+              website:
+                type: string
+                description: Website of the extension.
+                example: 'https://chatbotsplace.com'
+              isTrustedPublisher:
+                type: boolean
+                description: Whether the publisher is trusted.
+                example: true
+              isFeatured:
+                type: boolean
+                description: Whether the extension is featured.
+                example: true
+              riskImpact:
+                type: integer
+                description: Risk impact score. From 0 (Very low risk impact) to 4 (Very high risk impact)
+                example: 1
+              riskLikelihood:
+                type: integer
+                description: Risk likelihood score. From 0 (Very low risk likelihood) to 4 (Very high risk likelihood)
+                example: 1
+              env:
+                type: string
+                description: Environment.
+                example: 'chrome-stats'
+              stats:
+                type: array
+                description: Historical statistics for the extension.
+                items:
+                  type: object
+                  properties:
+                    ts:
+                      type: string
+                      description: Timestamp in YYYYMMDD format.
+                      example: '20250530'
+                    value:
+                      type: object
+                      description: Statistics values for the timestamp.
+                      properties:
+                        userCount:
+                          type: integer
+                          description: Number of users.
+                          example: 100000
+                        rating:
+                          type: number
+                          format: float
+                          description: Average rating.
+                          example: 4.2
+                        ratingCount:
+                          type: integer
+                          description: Number of ratings.
+                          example: 5
+                        version:
+                          type: string
+                          description: Version at the timestamp.
+                          example: '1.8.6'
+                        size:
+                          type: integer
+                          description: Size in bytes at the timestamp.
+                          example: 1132462
+              ranking:
+                type: array
+                description: Historical ranking data for the extension.
+                items:
+                  type: object
+                  properties:
+                    ts:
+                      type: string
+                      description: Timestamp in YYYYMMDD format.
+                      example: '20250530'
+                    value:
+                      type: object
+                      description: Ranking values for the timestamp.
+                      additionalProperties:
+                        type: integer
+                      example:
+                        overall-rank: 2380
+                        extension-rank: 2070
+                        keyword-ai_capabilities-rank: 93
+                        cat-productivity/tools-rank: 109
+                        keyword-chatbotsplace-rank: 1
+                        keyword-chatbot-rank: 193
+                        keyword-claude_ai-rank: 152
+                        featured: 971
+              oneDayAgoStats:
+                type: object
+                description: Statistics from one day ago.
+                properties:
+                  userCount:
+                    type: integer
+                    description: Number of users one day ago.
+                    example: 100000
+                  rating:
+                    type: number
+                    format: float
+                    description: Average rating one day ago.
+                    example: 4.333333333333333
+                  ratingCount:
+                    type: integer
+                    description: Number of ratings one day ago.
+                    example: 6
+                  version:
+                    type: string
+                    description: Version one day ago.
+                    example: '1.8.7'
+                  size:
+                    type: integer
+                    description: Size in bytes one day ago.
+                    example: 1111491
+                  overallRank:
+                    type: integer
+                    description: Overall rank one day ago.
+                    example: 2341
+              oneWeekAgoStats:
+                type: object
+                description: Statistics from one week ago.
+                properties:
+                  userCount:
+                    type: integer
+                    description: Number of users one week ago.
+                    example: 100000
+                  rating:
+                    type: number
+                    format: float
+                    description: Average rating one week ago.
+                    example: 4.2
+                  ratingCount:
+                    type: integer
+                    description: Number of ratings one week ago.
+                    example: 5
+                  version:
+                    type: string
+                    description: Version one week ago.
+                    example: '1.8.6'
+                  size:
+                    type: integer
+                    description: Size in bytes one week ago.
+                    example: 1132462
+                  overallRank:
+                    type: integer
+                    description: Overall rank one week ago.
+                    example: 2380
+              overallRank:
+                type: integer
+                description: Current overall rank of the extension.
+                example: 2329
+              allRanks:
+                type: array
+                description: All current ranks of the extension.
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                      description: Human-readable label for the rank.
+                      example: 'Overall'
+                    key:
+                      type: string
+                      description: Key for the rank.
+                      example: 'overall-rank'
+                    value:
+                      type: integer
+                      description: Rank value.
+                      example: 2329
+                    path:
+                      type: string
+                      description: Path to the rank page.
+                      example: '/chrome/top'
+                    page:
+                      type: integer
+                      description: Page number for the rank.
+                      example: 94
+                    type:
+                      type: string
+                      description: Type of rank (keyword, cat, etc.).
+                      example: 'keyword'
+                    difficulty:
+                      type: number
+                      format: float
+                      description: Difficulty score for keyword ranks.
+                      example: 15
+      required:
+        - event
+        - date
+        - extensions
+
+    OnUpdatePayload:
+      type: object
+      description: The payload sent for the on-update event.
+      properties:
+        event:
+          type: string
+          description: The type of event that occurred.
+          enum:
+            - on-update
+          example: on-update
+        date:
+          type: string
+          description: The date for which the update occurred (YYYY-MM-DD).
+          format: date
+          example: '2025-06-06'
+        extension:
+          type: object
+          description: Details about the extension that was updated.
+          properties:
+            id:
+              type: string
+              description: The id of the extension.
+              example: 'ehfbeifiabejfkjhbghkgnnaccfmelkb'
+            name:
+              type: string
+              description: The name of the extension.
+              example: 'Extension Guard - Manage and secure extensions'
+            author:
+              type: string
+              description: Author of the extension.
+              example: 'https://chrome-stats.com'
+            version:
+              type: string
+              description: The current version of the extension.
+              example: '2.0.5'
+            website:
+              type: string
+              description: Website of the extension.
+              example: 'https://chrome-stats.com'
+            email:
+              type: string
+              description: Contact email for the extension.
+              example: 'support@chrome-stats.com'
+            isFeatured:
+              type: boolean
+              description: Whether the extension is featured.
+              example: true
+            isTrustedPublisher:
+              type: boolean
+              description: Whether the publisher is trusted.
+              example: true
+            permissions:
+              type: array
+              description: List of permissions required by the extension.
+              items:
+                type: string
+              example: ['alarms', 'management', 'notifications', 'storage', 'tabs', 'sidePanel']
+            hostPermissions:
+              type: array
+              description: List of host permissions required by the extension.
+              items:
+                type: string
+              example: ['https://chrome-stats.com/', 'https://*.chrome-stats.com/']
+            riskImpact:
+              type: integer
+              description: Risk impact score. From 0 (Very low risk impact) to 4 (Very high risk impact)
+              example: 2
+            riskLikelihood:
+              type: integer
+              description: Risk likelihood score. From 0 (Very low risk likelihood) to 4 (Very high risk likelihood)
+              example: 1
+            previousData:
+              type: object
+              description: Previous data for the extension before the update.
+              properties:
+                website:
+                  type: string
+                  description: Previous website of the extension.
+                  example: 'https://chrome-stats.com'
+                riskLikelihood:
+                  type: integer
+                  description: Previous risk likelihood score. From 0 (Very low risk likelihood) to 4 (Very high risk likelihood)
+                  example: 1
+                author:
+                  type: string
+                  description: Previous author of the extension.
+                  example: 'https://chrome-stats.com'
+                permissions:
+                  type: array
+                  description: Previous list of permissions required by the extension.
+                  items:
+                    type: string
+                  example: ['alarms', 'management', 'notifications', 'storage', 'tabs', 'sidePanel']
+                name:
+                  type: string
+                  description: Previous name of the extension.
+                  example: ''
+                riskImpact:
+                  type: integer
+                  description: Previous risk impact score. From 0 (Very low risk impact) to 4 (Very high risk impact)
+                  example: 2
+                hostPermissions:
+                  type: array
+                  description: Previous list of host permissions required by the extension.
+                  items:
+                    type: string
+                  example: ['https://chrome-stats.com/', 'https://*.chrome-stats.com/']
+                isFeatured:
+                  type: boolean
+                  description: Whether the extension was previously featured.
+                  example: true
+                version:
+                  type: string
+                  description: Previous version of the extension.
+                  example: '2.0.5'
+                email:
+                  type: string
+                  description: Previous contact email for the extension.
+                  example: 'support@chrome-stats.com'
+                isTrustedPublisher:
+                  type: boolean
+                  description: Whether the publisher was previously trusted.
+                  example: true
+      required:
+        - event
+        - date
+        - extension
+
+    NewReviewsPayload:
+      type: object
+      description: The payload sent for the new-reviews event.
+      properties:
+        event:
+          type: string
+          description: The type of event that occurred.
+          enum:
+            - new-reviews
+          example: new-reviews
+        date:
+          type: string
+          description: The date for which the reviews were detected (YYYY-MM-DD).
+          format: date
+          example: '2025-06-06'
+        extension:
+          type: object
+          description: Details about the extension and its new reviews.
+          properties:
+            id:
+              type: string
+              description: The extension ID.
+              example: 'cbapcdnkcgiajboppakkhjmdolbkinge'
+            name:
+              type: string
+              description: The name of the extension.
+              example: 'ChatbotsPlace AI Hub'
+            logo:
+              type: string
+              description: URL to the extension's logo.
+              example: 'https://lh3.googleusercontent.com/7WolsCObi9vsu8Dzfay70X8rEyI52H0mtLt05zGlHKwdKcrbr0Q-rUB1AMNVRv0Jj_GX2-EMQ3DbKD4vG-aaJ7QX'
+            url:
+              type: string
+              description: URL to the extension's reviews page.
+              example: 'https://chrome-stats.com/d/cbapcdnkcgiajboppakkhjmdolbkinge/reviews'
+            reviews:
+              type: array
+              description: List of new reviews for the extension.
+              items:
+                type: object
+                properties:
+                  reviewId:
+                    type: string
+                    description: Unique identifier for the review.
+                    example: 'gp:AOqpTOFgYZV8MJpfmXe9YWRK0Qwu6jsVtQwbLGBYQJLxZ3aBXu0YQzgGYQ'
+                  authorName:
+                    type: string
+                    description: Name of the review author.
+                    example: 'John Doe'
+                  rating:
+                    type: integer
+                    description: Rating given by the reviewer (1-5).
+                    example: 5
+                  body:
+                    type: string
+                    description: Text content of the review.
+                    example: 'This extension is amazing! It has greatly improved my productivity.'
+                  lang:
+                    type: string
+                    description: Language code of the review.
+                    example: 'en'
+                  timestamp:
+                    type: integer
+                    format: int64
+                    description: Timestamp when the review was posted (milliseconds since epoch).
+                    example: 1717027200000
+      required:
+        - event
+        - date
+        - extension
+
+  examples:
+    AdvancedSearchRequestExample:
+      highUserCount:
+        summary: Search for high user count
+        value:
+          sorting: 'userCount'
+          sortDirection: 'desc'
+          index: 'extension'
+          fields:
+            operator: 'AND'
+            conditions:
+              - column: 'userCount'
+                operator: '>='
+                value: 100000
+      highUserCountWithLowRating:
+        summary: Search for high user count with low ratings
+        value:
+          sorting: userCount
+          sortDirection: desc
+          index: extension
+          fields:
+            operator: AND
+            conditions:
+              - column: userCount
+                operator: '>='
+                value: 100000
+              - column: ratingValue
+                operator: '<'
+                value: '3'
+      permissionsSearch:
+        summary: Search for cookies permissions with <all_urls>
+        value:
+          sorting: userCount
+          sortDirection: desc
+          index: extension
+          fields:
+            operator: AND
+            conditions:
+              - column: manifest.permissions
+                operator: '='
+                value: cookies
+              - column: manifest.host_permissions
+                operator: '='
+                value: '<all_urls>'
+      searchPermissionsOrOptionalPermissions:
+        summary: Search by permissions or optional permissions
+        value:
+          sorting: userCount
+          sortDirection: desc
+          index: extension
+          fields:
+            operator: OR
+            groups:
+              - operator: AND
+                conditions:
+                  - column: manifest.permissions
+                    operator: '='
+                    value: cookies
+              - operator: AND
+                conditions:
+                  - column: manifest.optional_permissions
+                    operator: '='
+                    value: cookies
+      searchReviewText:
+        summary: Search for user reviews with certain text
+        value:
+          sorting: rating
+          sortDirection: desc
+          index: reviews
+          fields:
+            operator: AND
+            conditions:
+              - column: body
+                operator: '='
+                value: Very good
+      searchReviewByAuthor:
+        summary: Search for user reviews by author name
+        value:
+          sorting: timestamp
+          sortDirection: desc
+          index: reviews
+          fields:
+            operator: AND
+            conditions:
+              - column: authorName
+                operator: '='
+                value: Tester

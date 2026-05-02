@@ -12,6 +12,15 @@ __pycache__/
 .venv/
 venv/
 
+# Secrets / local config — NEVER commit any of these.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+.secrets
+
 # macOS
 .DS_Store
 
