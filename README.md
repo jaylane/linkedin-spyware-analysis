@@ -52,6 +52,9 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 | [`scripts/re-extract.sh`](scripts/re-extract.sh) | Regenerates `probed-extension-ids.txt` from a freshly-downloaded chunk. Use this to track changes across LinkedIn deploys. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Per-capture record of the bundle hash, probe count, and any changes. PRs welcome with newer captures. |
 | [`THANKS.md`](THANKS.md) | Credits to the people who reported this before me. |
+| [`reports/MALICIOUS_OVERLAP.md`](reports/MALICIOUS_OVERLAP.md) | Cross-reference of LinkedIn's 6,222-entry probe list against an independent malicious-extension database. **Headline: 0.64% overlap.** |
+| [`scripts/cross_reference_malicious.py`](scripts/cross_reference_malicious.py) | Regenerates the cross-reference report. Standard-library Python, no deps. |
+| [`scripts/fetch_extension_metadata.py`](scripts/fetch_extension_metadata.py) | Slow companion: fetches Chrome Web Store name + description for every probed ID. Resumable. |
 | `README.md` | This file. |
 
 ## Observed in the wild
@@ -69,6 +72,28 @@ The detail view of any single row shows it was a `fetch` that failed with `net::
 Important presentation detail: Chrome's DevTools rewrites the displayed URL to **`chrome-extension://invalid/`** when the target extension isn't installed. This is a Chrome-side privacy mitigation — it deliberately hides which extension ID was probed so a screenshot can't leak the probe list. The real fetches go to `chrome-extension://<actual-id>/<file>` for each of the 6,222 unique IDs in [`probed-extension-ids.txt`](probed-extension-ids.txt).
 
 In one captured session: **300 of the 2,865 visible network requests on a single profile pageview were extension probes** (scrolled view, the actual count is in the thousands — there is one fetch per probed ID).
+
+## Is the probe list actually targeting malicious extensions?
+
+LinkedIn frames the probe internally as **anti-abuse telemetry** (the class is literally `AbuseFeaturesCollectionCoordinator`). A natural empirical question is: how much of the 6,222-entry probe list overlaps with extensions that an *independent* curated database has classified as malicious, suspicious, or policy-violating?
+
+Cross-referencing against [`toborrm9/malicious_extension_sentry`](https://github.com/toborrm9/malicious_extension_sentry) (1,465 unique IDs at snapshot time):
+
+| metric | value |
+|---|---|
+| LinkedIn probe list (unique IDs) | **6,222** |
+| Malicious DB (unique IDs) | **1,465** |
+| **Overlap** | **40** |
+| Overlap as % of LinkedIn probe list | **0.64%** |
+| Probes targeting extensions with **no** known-malicious classification | **6,182 (99.36%)** |
+
+So two things are simultaneously true:
+
+1. **Where the lists overlap, the framing holds.** The 40 matched extensions are overwhelmingly LinkedIn-specific scraping / prospecting / lead-gen / fake-engagement tools (e.g. *Linkedin Cookie Importer*, *Shield Linkedin Analytics*, *NavWise: Prospect List Exporter*, *Salesmind Ai*, *ConnectGenie - Linkedin AI Assistant*, *Yadulink Linkedin Prospec*, *Buska LinkedIn*, *Highperformr Ai Phone Num*). For that narrow slice, "anti-abuse" is a defensible label.
+
+2. **But that's 0.64%.** The other 99.36% of the IDs LinkedIn fingerprints on every Chromium pageview have **no** classification in the curated malicious-extension database. Whatever LinkedIn is doing with those 6,182 probes, "checking for known-malicious extensions" is not a complete explanation.
+
+Full breakdown, the 40-row overlap table, and reproduction instructions: [`reports/MALICIOUS_OVERLAP.md`](reports/MALICIOUS_OVERLAP.md).
 
 ## This is not new — LinkedIn was told over two months ago
 

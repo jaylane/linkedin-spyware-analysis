@@ -1,6 +1,17 @@
 # Launch-post drafts — kept local, not public
 posts/
 
+# Regenerable analysis artifacts. The scripts in `scripts/` will recreate
+# these on demand, so we don't bloat the repo with large CSVs that drift
+# every time anyone runs the pipeline.
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
 # macOS
 .DS_Store
 
