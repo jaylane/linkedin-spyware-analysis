@@ -55,7 +55,9 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 
 ## Observed in the wild
 
-While viewing a single LinkedIn profile page (`linkedin.com/in/<user>/`) with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
+While trying to get a resized version of my LinkedIn profile image (`linkedin.com/in/jayjlane.png?size=100`) I hit an error and went back to my main profile page  with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
+
+Thinking that one of my extensions weren't playing nice I disabled the usual suspects UBlockOrigin, Obsidian Web Clipper, React Dev Tools, and it was still occurring. I went scorched earth and disabled all my extensions to no avail causing me to look deeper.
 
 ![DevTools Network panel showing chrome-extension://invalid/ probes on a single profile pageview](screenshots/devtools-network-overview.png)
 
