@@ -91,14 +91,34 @@ For transparency, here is what was checked and why it ended up not contributing.
 
 Suggested as a candidate cross-reference target. Investigated and rejected:
 
-- **It is not a database.** Reviewing the source confirms it is a Python pipeline that ingests installed-extension inventory from Tenable (a corporate vulnerability scanner; plugins `96533` for Windows and `133180` for macOS are used to enumerate extensions on employee workstations) and forwards each `<extension_id>/<version>` to CrXcavator's risk-scoring API. No hardcoded list of malicious IDs lives in the repository.
-- **CrXcavator (the actual scorer) is sunset.** `crxcavator.io` no longer resolves in DNS. The free service Duo Security operated for community extension risk scoring was retired by Cisco. The Wayfair repo's last commit was July 2020 (pre–Manifest V3), so it cannot run end-to-end today even with valid Tenable credentials.
+- **It is not a database.** Reviewing the source confirms it is a Python pipeline that ingests installed-extension inventory from Tenable (a corporate vulnerability scanner; plugins `96533` for Windows and `133180` for macOS enumerate extensions on employee workstations) and forwards each `<extension_id>/<version>` to CRXcavator's risk-scoring API. No hardcoded list of malicious IDs lives in the repository.
+- **The Wayfair repo is abandonware.** Last commit July 2020 (pre–Manifest V3). It cannot run end-to-end today even with valid Tenable credentials.
+- **The scorer it depends on is in a zombie state — see CRXcavator below.**
 
-Verdict: *no list to compare against*. The negative result is captured here so the next person checking can save the cycles.
+### `polarityio/crxcavator`
+
+Also suggested — Polarity's integration plugin that wraps the CRXcavator REST API for the Polarity threat-intel platform. Their integration repo had a release as recently as Feb 2026, which is suggestive of life. Investigated and also rejected, for the same underlying reason:
+
+- **It is a thin wrapper, not a database.** The integration just forwards requests to whatever CRXcavator API base URL is configured (default `https://api.crxcavator.io/v1`). It does not ship its own list of malicious IDs.
+- **The default CRXcavator endpoint is non-functional.** Direct probe results from this snapshot's investigation:
+
+  | layer | status |
+  |---|---|
+  | DNS `api.crxcavator.io` | resolves → AWS ELB in `us-east-2` |
+  | TCP `:443` | accepts connections |
+  | TLS handshake | succeeds, valid cert `CN=api.crxcavator.io` (Amazon-issued) |
+  | `GET /v1/report/<extension_id>` | **HTTP 504 Gateway Time-out** |
+  | `GET /` | **HTTP 502 Bad Gateway** |
+  | apex `crxcavator.io` | DNS does not resolve |
+  | `www.crxcavator.io` (S3 static UI) | resolves but connection times out |
+
+  CRXcavator (originally a Duo Security free service, now under Cisco) appears to be in a half-deprecated zombie state: DNS, the ELB, and TLS termination are still standing — likely because the AWS resources have not been formally decommissioned — but the actual application has not served a successful response in this investigation. Cisco has not, to this researcher's knowledge, published a formal sunset notice. Polarity's integration permits configuring an alternate base URL, so an enterprise customer with a private CRXcavator-compatible mirror could still use it; there is no public mirror this repository is aware of.
+
+Verdict on both Wayfair and Polarity: *no list, and the underlying scoring service does not respond*. The negative result is captured here so the next person checking can save the cycles.
 
 ### Other public sources
 
-There is no other curated open dataset with the breadth and accessibility of `toborrm9/malicious_extension_sentry` that this repository is aware of as of the snapshot date. PRs adding additional cross-references are welcome — particularly anything that publishes a machine-readable CSV/JSON of confirmed-malicious or policy-violating extensions.
+There is no other curated open dataset with the breadth and accessibility of `toborrm9/malicious_extension_sentry` that this repository is aware of as of the snapshot date. PRs adding additional cross-references are welcome — particularly anything that publishes a machine-readable CSV/JSON of confirmed-malicious or policy-violating extensions, or a still-operational replacement for the CRXcavator risk-scoring API.
 
 ## Reproduce
 
