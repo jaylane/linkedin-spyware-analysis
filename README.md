@@ -9,7 +9,7 @@ This file is **not** a separately-injected script. It is one chunk of LinkedIn's
 Two complementary techniques to enumerate which Chrome extensions a visitor has installed, plus a full classical browser fingerprint, all sent to LinkedIn's tracking pipeline.
 
 ### 1. Active probe — `AedEvent` (Anti-abuse Extension Detection)
-- Iterates a hardcoded list of **6,236 specific Chrome extension IDs**, each paired with a known-public file from that extension's `web_accessible_resources` manifest declaration.
+- Iterates a hardcoded list of **6,236 entries** (**6,222 unique** Chrome extension IDs — the bundle contains 14 duplicate entries), each paired with a known-public file from that extension's `web_accessible_resources` manifest declaration.
 - For each pair, calls `fetch("chrome-extension://<id>/<file>")`.
 - Under Manifest V3 the fetch only succeeds if the extension is installed *and* the file is exposed — so a successful response confirms installation.
 - Successes are POSTed to LinkedIn's tracking endpoint as event `AedEvent` with `browserExtensionIds: [...]`.
@@ -46,15 +46,24 @@ Everything is LZ-string compressed and base64'd via the bundle's `compressToBase
 
 | file | what it is |
 |---|---|
-| `deobfuscated-extension-detection.js` | The two extension-detection functions + DOM walker, fully renamed and beautified, ready to read or quote. |
-| `probed-extension-ids.txt` | All 6,236 extension IDs in the hardcoded probe list, one per line. Look any of them up at `https://chromewebstore.google.com/detail/<id>`. |
+| [`deobfuscated-extension-detection.js`](deobfuscated-extension-detection.js) | The two extension-detection functions + DOM walker, fully renamed and beautified, ready to read or quote. |
+| [`probed-extension-ids.txt`](probed-extension-ids.txt) | All 6,222 unique extension IDs from the hardcoded probe list, one per line, sorted. Look any of them up at `https://chromewebstore.google.com/detail/<id>`. |
+| [`screenshots/`](screenshots/) | DevTools captures showing the probes firing on a real linkedin.com pageview. |
+| [`scripts/re-extract.sh`](scripts/re-extract.sh) | Regenerates `probed-extension-ids.txt` from a freshly-downloaded chunk. Use this to track changes across LinkedIn deploys. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Per-capture record of the bundle hash, probe count, and any changes. PRs welcome with newer captures. |
 | `README.md` | This file. |
 
 ## Observed in the wild
 
 While viewing a single LinkedIn profile page (`linkedin.com/in/<user>/`) with DevTools open, the Network panel fills with thousands of failed `chrome-extension://invalid/` fetches in two bursts (one near page-load, one a few seconds later — corresponding to the two code paths in `fireExtensionDetectedEvents`, the eager call and the `requestIdleCallback`/route-change re-fire).
 
-Important presentation detail: Chrome's DevTools rewrites the displayed URL to **`chrome-extension://invalid/`** when the target extension isn't installed. This is a Chrome-side privacy mitigation — it deliberately hides which extension ID was probed so a screenshot can't leak the probe list. The real fetches go to `chrome-extension://<actual-id>/<file>` for each of the 6,236 IDs in `probed-extension-ids.txt`.
+![DevTools Network panel showing chrome-extension://invalid/ probes on a single profile pageview](screenshots/devtools-network-overview.png)
+
+The detail view of any single row shows it was a `fetch` that failed with `net::ERR_FAILED` — the diagnostic Chrome returns when a `chrome-extension://` URL targets an extension that isn't installed:
+
+![Closer view: each row is a failed fetch with type=fetch, status=(failed) net::ERR_FAILED](screenshots/devtools-network-failed-fetches.png)
+
+Important presentation detail: Chrome's DevTools rewrites the displayed URL to **`chrome-extension://invalid/`** when the target extension isn't installed. This is a Chrome-side privacy mitigation — it deliberately hides which extension ID was probed so a screenshot can't leak the probe list. The real fetches go to `chrome-extension://<actual-id>/<file>` for each of the 6,222 unique IDs in [`probed-extension-ids.txt`](probed-extension-ids.txt).
 
 In one captured session: **300 of the 2,865 visible network requests on a single profile pageview were extension probes** (scrolled view, the actual count is in the thousands — there is one fetch per probed ID).
 
