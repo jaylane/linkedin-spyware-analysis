@@ -83,6 +83,23 @@ Each row is an extension that appears on **both** LinkedIn's hardcoded probe lis
 | `achcinfieogfidhjekdbbmapmffifchl` | Warmr | Policy Violation | Store Monitoring | 2026-04-26 |
 | `ldaebepnkfockfedaloedoelkjlmpnnl` | Yadulink Linkedin Prospec | Policy Violation | Store Monitoring | 2026-04-13 |
 
+## Other databases considered
+
+For transparency, here is what was checked and why it ended up not contributing.
+
+### `wayfair-incubator/malicious-chrome-extension-scanner`
+
+Suggested as a candidate cross-reference target. Investigated and rejected:
+
+- **It is not a database.** Reviewing the source confirms it is a Python pipeline that ingests installed-extension inventory from Tenable (a corporate vulnerability scanner; plugins `96533` for Windows and `133180` for macOS are used to enumerate extensions on employee workstations) and forwards each `<extension_id>/<version>` to CrXcavator's risk-scoring API. No hardcoded list of malicious IDs lives in the repository.
+- **CrXcavator (the actual scorer) is sunset.** `crxcavator.io` no longer resolves in DNS. The free service Duo Security operated for community extension risk scoring was retired by Cisco. The Wayfair repo's last commit was July 2020 (pre–Manifest V3), so it cannot run end-to-end today even with valid Tenable credentials.
+
+Verdict: *no list to compare against*. The negative result is captured here so the next person checking can save the cycles.
+
+### Other public sources
+
+There is no other curated open dataset with the breadth and accessibility of `toborrm9/malicious_extension_sentry` that this repository is aware of as of the snapshot date. PRs adding additional cross-references are welcome — particularly anything that publishes a machine-readable CSV/JSON of confirmed-malicious or policy-violating extensions.
+
 ## Reproduce
 
 ```bash
