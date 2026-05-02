@@ -246,7 +246,7 @@ Of the 6,220 enriched records, **40** are also in the curated malicious-extensio
 | `dcllajlpjeaobemjcplencinnjdkefkc` | Queens Game Solver | 3 × 2 | Policy Violation |
 | `eckfhhngfhepmndojbnphnlnemglmojp` | Valley | 3 × 2 | Policy Violation |
 | `fbmgcejhoneccecnplfllgkfgheoengm` | Buska LinkedIn | 3 × 2 | Policy Violation |
-| `gmigkpkjegnpmjpmnmgnkhmoinpgdnfc` | Calendly Docket | Free Meeting Schedul | 2 × 3 | Malware |
+| `gmigkpkjegnpmjpmnmgnkhmoinpgdnfc` | Calendly Docket Free Meeting Schedul | 2 × 3 | Malware |
 | `inloipbahbmhelpokmejailbmcegccal` | ConnectGenie - Linkedin AI Assistant | 3 × 2 | Policy Violation |
 | `kdmcdkanhnbdcmadgljmhdimdlfpgple` | Saywhat | 3 × 2 | Policy Violation |
 | `kjidkkncdchjnnfpclneimlcmghcfoon` | intentleads - Engagement based LinkedI | 3 × 2 | In store but not whitelisted |
